@@ -53,7 +53,7 @@ python3 tools/build_icons.py
 PLAYWRIGHT_MODULE=/已有的/playwright node tools/build_share.js
 ```
 
-开始页提供三套可切换首图。改 `js/art.js` 顶部的 `G.CONFIG.keyart`：`a` 是西瓜皮车与心虚车商（默认），`b` 是现有车图代码拼装，`c` 是车行灯箱招牌。A/C 的手机与桌面图片分别构图，完整显示，不硬裁；标题、副标题和标语由 HTML/CSS 排版。切换不改变经营或存档。新图母版仍在本地 `assets_original/ui/`，经 `tools/build_webp.py` 生成运行图。
+开始页提供三套可切换首图。改 `js/art.js` 顶部的 `G.CONFIG.keyart`：`a` 是西瓜皮车与心虚车商（默认），`b` 是现有车图代码拼装，`c` 是车行灯箱招牌。A/C 的手机与桌面图片分别构图；手机完整显示竖图。≥1000px 开始页最大宽1200px、两栏3:2居中，A桌面横图按西瓜车焦点cover铺满至少75vh并与右栏等高。菜单位于内容区右上，单选控件采用空心圈/金色圆点和150ms过渡。标题、副标题和标语由 HTML/CSS 排版。切换不改变经营或存档。新图母版仍在本地 `assets_original/ui/`，经 `tools/build_webp.py` 生成运行图。
 
 `G.ASSET_PACK` 可以单独关闭美术组并退回矢量画。路径扩展名统一由 `G.ASSET_EXT` 提供。母版、运行图与图标分开，不做 PNG 兜底。
 
@@ -82,7 +82,8 @@ assets/                  WebP 美术与标准 PNG / ICO 图标
 docs/preview.webp        游戏截图
 tools/test-events.js     引擎与存档回归
 tools/browser-check.js   可选 Playwright 浏览器验收
-tools/keyart-check.js    三案四尺寸首图检查与截图
+tools/keyart-check.js    三案五尺寸首图检查与截图
+tools/start-screen-check.js  开始页布局、单选与手机对照检查
 tools/keyart-compare.py  首图截图联系表
 tools/build_share.js     当前首图的 CSS 分享图
 tools/text-audit.js      玩家文案提取
@@ -104,7 +105,7 @@ python3 -m http.server 8893 --bind 127.0.0.1
 PLAYWRIGHT_MODULE=/已有的/playwright node tools/browser-check.js
 ```
 
-72 项断言、35 张事件卡的 266 个选项组合覆盖员工、金融、事件、旧存档续玩 24 月、坏存档保护。浏览器检查包含 375 / 390 / 430 / 1280 / 1920 五种视口、触屏、存档下载及文件导入、三个月经营、结算防连点和偏好持久化。首图另检查三案 × 四尺寸、40px 标题、资金卡首屏可见、招牌定位、图片完整显示和美术关闭后备。合成触屏事件不能替代所有真实 iOS 手势或真人听音。
+72 项断言、35 张事件卡的 266 个选项组合覆盖员工、金融、事件、旧存档续玩 24 月、坏存档保护。浏览器检查包含 375 / 390 / 430 / 1280 / 1440 / 1920 六种视口、触屏、存档下载及文件导入、三个月经营、结算防连点和偏好持久化。首图另检查三案 × 五尺寸、40px 标题、资金卡首屏可见、招牌定位、构图适配和美术关闭后备；另验收单选点击/方向键/过渡/减少动态效果，宽屏居中、3:2、首图与右栏等高及含继续按钮的首屏布局。合成触屏事件不能替代所有真实 iOS 手势或真人听音。
 
 ### 沿用的 v0.9 校准结果
 

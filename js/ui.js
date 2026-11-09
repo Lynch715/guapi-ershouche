@@ -77,12 +77,12 @@ var G = globalThis.G = globalThis.G || {};
   /* ---------- 开始界面 ---------- */
   function startScreen() {
     const diffs = G.CONFIG.difficulties.map((d, i) => `
-      <label class="pick">
+      <label class="pick pick-funds">
         <input type="radio" name="diff" value="${d.id}" ${i === 0 ? 'checked' : ''}>
         <div><b>${d.name}</b><span>启动资金 ${fmt(d.cash)}</span><span class="muted">目标净资产 ${fmt(d.goal)}</span></div>
       </label>`).join('');
     const locs = Object.entries(G.LOCATIONS).map(([id, l], i) => `
-      <label class="pick">
+      <label class="pick pick-location">
         <input type="radio" name="loc" value="${id}" ${i === 1 ? 'checked' : ''}>
         <div><div class="loc-art">${G.Art.store(1, id, { empty: true })}</div><b>${l.name}</b><span>${l.desc}</span>
           <span class="muted">租金 ${level3(l.rent, 0.8, 1.1)} · 客流 ${level3(l.traffic, 1, 1.5)} · 抽查 ${level3(l.inspect, 0.05, 0.09)}</span></div>
@@ -471,6 +471,7 @@ var G = globalThis.G = globalThis.G || {};
   /* ---------- 渲染 ---------- */
   function render() {
     const app = document.getElementById('app');
+    app.classList.toggle('at-start', !G.state);
     if (renderedState !== G.state) { previousHUD = null; renderedState = G.state; }
     const currentHUD = G.Feedback.snapshot();
     if (!G.state) { app.innerHTML = startScreen() + currentModal(); G.Art.preload?.(); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(); return; }
