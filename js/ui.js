@@ -89,9 +89,7 @@ var G = globalThis.G = globalThis.G || {};
       </label>`).join('');
     return `
       <div class="start">${toolbar()}
-        <div class="start-intro"><div class="start-art">${G.Art.keyart() || G.Art.store(1, 'suburb')}</div>
-        <h1>瓜皮二手车</h1>
-        <p class="sub">二手车商模拟器 · 钱和良心，总得守住一个。</p></div>
+        <div class="start-intro"><div class="start-art">${G.Art.keyart()}</div></div>
         <div class="start-options">
         <h3>启动资金</h3><div class="picks">${diffs}</div>
         <h3>门店地段</h3><div class="picks">${locs}</div>

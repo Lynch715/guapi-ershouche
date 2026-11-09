@@ -1,5 +1,5 @@
 /* =========================================================
- * 矢量美术：车辆、门店、车库。全部是代码画的 SVG，不需要图片文件。
+ * 美术渲染：车辆、门店、车库与首图。WebP 素材配合 SVG 染色，车辆保留矢量后备。
  *
  * 想换成自己的图片素材：在 G.ART_OVERRIDES 里填路径即可，例如
  *   G.ART_OVERRIDES.car.suv = 'assets/cars/suv.webp';
@@ -13,6 +13,10 @@ G.ART_OVERRIDES = G.ART_OVERRIDES || { car: {}, store: {} };
 /* 正式美术素材（assets/）。哪一组关掉（false）或者文件缺失，就退回矢量画。 */
 G.ASSET_BASE = G.ASSET_BASE ?? 'assets/';
 G.ASSET_PACK = G.ASSET_PACK || { cars: true, garage: true, store: true, staff: true, endings: true, ui: true };
+
+// 开始页首图：a = 西瓜皮车与心虚车商；b = 现有车图代码拼装；c = 车行灯箱招牌。
+// 只改这个字母即可切换，不影响经营、随机数和存档。
+G.CONFIG.keyart = 'a';
 
 (function () {
   /* ---------- 颜色工具 ---------- */
@@ -315,7 +319,15 @@ G.ASSET_PACK = G.ASSET_PACK || { cars: true, garage: true, store: true, staff: t
     if (!G.ASSET_PACK.endings) return null;
     return `<img class="ending-img" src="${A(`endings/ending_${id}`)}" alt="">`;
   };
-  G.Art.keyart = () => (G.ASSET_PACK.ui ? `<div class="keyart" style="background-image:url('${A('ui/keyart')}')"><img class="logo-mark" src="${A('icon/icon-192.png')}" alt=""></div>` : null);
+  G.Art.keyart = function () {
+    const choice = ['a', 'b', 'c'].includes(G.CONFIG.keyart) ? G.CONFIG.keyart : 'a';
+    const variant = G.ASSET_PACK.ui ? choice : 'b';
+    const car = (catId, color, place) => `<div class="keyart-car keyart-car-${place}">${G.Art.car({ id: 400 + color, catId, color, flaws: [] }, { size: 480, plain: true })}<i class="keyart-price"></i>${place === 'front' ? '<i class="keyart-rind"></i>' : ''}</div>`;
+    const scene = variant === 'b'
+      ? `<div class="keyart-code-scene" aria-hidden="true"><div class="keyart-ground"></div>${car('classic', 6, 'back')}${car('suv', 3, 'middle')}${car('family', 7, 'front')}</div>`
+      : `<picture class="keyart-picture"><source media="(min-width: 1000px)" srcset="${A(`ui/keyart_${variant}_desktop`)}"><img src="${A(`ui/keyart_${variant}_mobile`)}" width="1122" height="1402" alt="" fetchpriority="high" decoding="async"></picture>`;
+    return `<section class="keyart keyart-${variant}" data-keyart="${variant}" aria-labelledby="start-title">${scene}<div class="keyart-copy"><h1 id="start-title" class="keyart-title"><span>瓜皮</span>二手车</h1><p class="keyart-subtitle">二手车商模拟器</p><p class="keyart-tagline">钱和良心，总得守住一个。</p></div></section>`;
+  };
 
   /* ---------- 门店场景 ---------- */
   function sky(loc, W, H) {

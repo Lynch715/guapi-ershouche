@@ -5,6 +5,7 @@ const fs=require('fs'),path=require('path');const {chromium}=require(process.env
 const root=path.resolve(__dirname,'..'),url=process.env.USEDCAR_TEST_URL||'http://127.0.0.1:8893/';
 const online=/^https:\/\/[^/]+\.github\.io\//.test(url);if(!online&&!/^http:\/\/(localhost|127\.0\.0\.1):\d+\/$/.test(url))throw new Error('请使用本地预览或 Pages 地址');
 const out=path.join(root,'_screens');const result={url,checks:[],errors:[],viewports:[],buttons:[],performance:{}};
+const prefix=process.env.USEDCAR_EVIDENCE_PREFIX||'t04';fs.mkdirSync(out,{recursive:true});
 function check(value,msg){result.checks.push({pass:!!value,msg});if(!value)throw new Error(msg);}
 const act=(p,name)=>p.locator(`[data-act="${name}"]`);
 async function click(p,name){const el=act(p,name).first();const disabled=await el.isDisabled();if(disabled)await el.evaluate(e=>e.scrollIntoView({block:'center'}));await el.click({force:disabled});result.buttons.push(name);}
@@ -15,11 +16,15 @@ async function geometry(p,label){const d=await p.evaluate(()=>({w:innerWidth,doc
 async function touch(p,label){const r=await p.evaluate(()=>{const gesture=new Event('gesturestart',{bubbles:true,cancelable:true});document.dispatchEvent(gesture);const move=new Event('touchmove',{bubbles:true,cancelable:true});Object.defineProperty(move,'touches',{value:[{},{}]});document.dispatchEvent(move);const wheel=new WheelEvent('wheel',{ctrlKey:true,bubbles:true,cancelable:true});document.dispatchEvent(wheel);const key=new KeyboardEvent('keydown',{key:'+',ctrlKey:true,bubbles:true,cancelable:true});document.dispatchEvent(key);const one=new Event('touchend',{bubbles:true,cancelable:true}),two=new Event('touchend',{bubbles:true,cancelable:true});document.body.dispatchEvent(one);document.body.dispatchEvent(two);return {scale:visualViewport.scale,gesture:gesture.defaultPrevented,move:move.defaultPrevented,wheel:wheel.defaultPrevented,key:key.defaultPrevented,double:two.defaultPrevented};});check(r.gesture&&r.move&&r.wheel&&r.key&&r.double&&Math.abs(r.scale-1)<.001,label+' 双指 / 手势 / 双击 / 组合键被拦截，scale=1');}
 async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.screenshot({path:path.join(out,name+'.png')});}
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
- for(const [w,h] of (online?[[430,932],[1280,800]]:[[375,667],[390,844],[430,932],[1280,800],[1920,1080]]).filter(([width])=>!process.env.USEDCAR_WIDTH || width===Number(process.env.USEDCAR_WIDTH))){
+ if(!online&&!process.env.USEDCAR_WIDTH)await require('./keyart-check')(browser,url,out,check,result);
+ for(const [w,h] of (online?[[390,844],[1280,800]]:[[375,667],[390,844],[430,932],[1280,800],[1920,1080]]).filter(([width])=>!process.env.USEDCAR_WIDTH || width===Number(process.env.USEDCAR_WIDTH))){
  const ctx=await browser.newContext({viewport:{width:w,height:h},hasTouch:w<500,isMobile:w<500,reducedMotion:'reduce'});
  await ctx.addInitScript(()=>{window.__vibes=[];window.__tones=0;try{navigator.vibrate=n=>{window.__vibes.push(n);return true;};}catch(_){}const Base=window.AudioContext;if(Base)window.AudioContext=class extends Base{createOscillator(){window.__tones++;return super.createOscillator();}};});
  const p=await ctx.newPage();p.on('pageerror',e=>result.errors.push(w+': '+e.message));p.on('response',r=>{if(r.status()>=400)result.errors.push(r.status()+' '+r.url());});p.on('console',m=>{if(m.type()==='error')result.errors.push(m.text());});
  await p.goto(url);await p.waitForLoadState('networkidle');check((await p.title()).includes('瓜皮二手车'),'游戏名');await geometry(p,w+' 开始');await touch(p,w+' 开始');
+ check(await p.locator('.keyart-title').count()===1,'开始页标题叠在首图');
+ check(await p.locator('.keyart-title').evaluate(e=>parseFloat(getComputedStyle(e).fontSize)>=40),'首图标题不小于40px');
+ await snapshot(p,prefix+(online?'-online-':'-start-')+(online?(w<500?'mobile':'desktop'):w));
  check(await p.locator('meta[name="viewport"]').getAttribute('content').then(s=>s.includes('user-scalable=no')),'viewport 已限制');
  await menu(p);check(await act(p,'save-import').count()===1&&await act(p,'save-export').count()===0,'未开局菜单只提供导入');await click(p,'menu-close');
  await click(p,'start');check(await p.locator('#tutorial-card').count()===1,'首局引导出现');await p.locator('[data-tutorial="skip"]').click();
@@ -42,7 +47,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await menu(p);await click(p,'new-game');await click(p,'confirm-no');check(await p.evaluate(()=>G.state.month)===4,'取消新局保留进度');await click(p,'menu-close');
  for(const tab of ['buy','stock','team','store','ledger']){await p.locator(`[data-act="tab"][data-tab="${tab}"]`).click();await geometry(p,w+' '+tab);await p.evaluate(()=>scrollTo(0,document.body.scrollHeight));check(await p.evaluate(()=>document.querySelector('main').getBoundingClientRect().bottom<=document.querySelector('.bar-bottom').getBoundingClientRect().top+1),tab+' 页末不被月结遮住');}
  await p.evaluate(()=>{G.ui.tab='stock';if(!G.state.cars.length)G.addCar(G.Car.generate('private'),50000,'分页检查车源');G.render();});await click(p,'stock-prev');const disabledMessage=await p.locator('#toast').innerText();check(disabledMessage.includes('第一页'),'禁用控件解释原因：'+disabledMessage);
- if(online)await snapshot(p,'t03-online-'+(w<500?'mobile':'desktop'));else await snapshot(p,'t03-menu-flow-'+w);
+ await snapshot(p,prefix+'-menu-flow-'+w+(online?'-online':''));
  result.viewports.push({width:w,height:h});await ctx.close();
  }
  if(!online){
@@ -52,4 +57,4 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  result.performance.renderMs=await p.evaluate(()=>{const t=performance.now();G.render();return performance.now()-t;});await ctx.close();
  }
  check(result.errors.length===0,'页面、控制台、图片及 manifest 无错误');
-}finally{fs.writeFileSync(path.join(out,online?'t03-online-results.json':'t03-browser-results.json'),JSON.stringify(result,null,2));await browser.close();}console.log(result.checks.length+' 项检查通过，错误 0');})().catch(e=>{console.error(e);process.exitCode=1;});
+}finally{fs.writeFileSync(path.join(out,prefix+(online?'-online-results.json':'-browser-results.json')),JSON.stringify(result,null,2));await browser.close();}console.log(result.checks.length+' 项检查通过，错误 0');})().catch(e=>{console.error(e);process.exitCode=1;});

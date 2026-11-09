@@ -1,6 +1,6 @@
 """原创瓜皮车图标（两个方案）；Pillow 代码绘图，无外部图形依赖。"""
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw
 ROOT=Path(__file__).resolve().parent.parent
 OUT=ROOT/'assets/icon';OUT.mkdir(parents=True,exist_ok=True)
 SCREEN=ROOT/'_screens';SCREEN.mkdir(exist_ok=True)
@@ -46,17 +46,5 @@ for y,im,label in [(34,A,'A - melon car'),(600,B,'B - car on rind')]:
   d.text((x,y),str(size),fill='#111215');compare.paste(im.resize((size,size),Image.Resampling.LANCZOS),(x,y+24));x+=size+32
 compare.save(SCREEN/'t03-icon-compare.png')
 A.resize((512,512),Image.Resampling.LANCZOS).save(SCREEN/'t03-icon-selected.png')
-# 分享图文字只用字体排版，左侧用既有原创主视觉。
-fonts=[Path('/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')]
-fontpath=next((p for p in fonts if p.exists()),None)
-if not fontpath: raise RuntimeError('需要中文字体来排分享图；请在脚本字体列表加入本机可用路径')
-def font(size):return ImageFont.truetype(str(fontpath),size)
-og=Image.new('RGB',(1200,630),'#111215');hero=Image.open(next(p for p in [ROOT/'assets_original/ui/keyart.jpg', ROOT/'assets/ui/keyart.webp'] if p.exists())).convert('RGB')
-og.paste(ImageOps.fit(hero,(580,630),centering=(.5,.65)),(0,0));d=ImageDraw.Draw(og)
-d.line((600,48,600,582),fill='#e2b866',width=3)
-og.paste(A.resize((90,90)),(650,62))
-d.text((650,185),'瓜皮二手车',font=font(66),fill='#f3d28f')
-d.text((654,280),'二手车商模拟器',font=font(30),fill='#ecedf0')
-for y,t in [(374,'从 500 万，到 1 个亿。'),(430,'老实赚，还是挖坑赚快钱？'),(500,'你的车行，你自己选。')]: d.text((654,y),t,font=font(28),fill='#c6cad2')
-og.save(OUT/'og-image.png',optimize=True)
-print('已生成 8 类图标与分享图，选用 A')
+# 分享图由浏览器使用选中首图和相同 CSS 单独生成，避免重做图标时恢复旧首图。
+print('已生成 8 类图标，选用 A；分享图请运行 node tools/build_share.js')
