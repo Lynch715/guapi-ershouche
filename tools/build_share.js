@@ -12,7 +12,7 @@ if(!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/$/.test(url))throw new Error('åˆ†äº
     const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url());});
     await page.goto(url);
     const variant=await page.evaluate(()=>{
-      const hero=G.Art.keyart();document.body.innerHTML='<div class="start">'+hero+'</div>';G.Art.ensureDefs();return G.CONFIG.keyart;
+      const hero=G.Art.keyart({share:true});document.body.innerHTML='<div class="start">'+hero+'</div>';G.Art.ensureDefs();return G.CONFIG.keyart;
     });
     await page.addStyleTag({content:`html,body{width:1200px;height:630px;overflow:hidden;margin:0;background:#17342f}
       .start{display:block;width:1200px;height:630px;padding:0;margin:0}

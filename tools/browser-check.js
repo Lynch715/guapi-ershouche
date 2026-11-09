@@ -5,7 +5,7 @@ const fs=require('fs'),path=require('path');const {chromium}=require(process.env
 const root=path.resolve(__dirname,'..'),url=process.env.USEDCAR_TEST_URL||'http://127.0.0.1:8893/';
 const online=/^https:\/\/[^/]+\.github\.io\//.test(url);if(!online&&!/^http:\/\/(localhost|127\.0\.0\.1):\d+\/$/.test(url))throw new Error('请使用本地预览或 Pages 地址');
 const out=path.join(root,'_screens');const result={url,checks:[],errors:[],viewports:[],buttons:[],performance:{}};
-const prefix=process.env.USEDCAR_EVIDENCE_PREFIX||'t05';fs.mkdirSync(out,{recursive:true});
+const prefix=process.env.USEDCAR_EVIDENCE_PREFIX||'t06';fs.mkdirSync(out,{recursive:true});
 function check(value,msg){result.checks.push({pass:!!value,msg});if(!value)throw new Error(msg);}
 const act=(p,name)=>p.locator(`[data-act="${name}"]`);
 async function click(p,name){const el=act(p,name).first();const disabled=await el.isDisabled();if(disabled)await el.evaluate(e=>e.scrollIntoView({block:'center'}));await el.click({force:disabled});result.buttons.push(name);}
@@ -17,7 +17,7 @@ async function touch(p,label){const r=await p.evaluate(()=>{const gesture=new Ev
 async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.screenshot({path:path.join(out,name+'.png')});}
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
  if(!online&&!process.env.USEDCAR_WIDTH)await require('./keyart-check')(browser,url,out,check,result,prefix);
- for(const [w,h] of (online?[[390,844],[1280,800],[1440,900],[1920,1080]]:[[375,667],[390,844],[430,932],[1280,800],[1440,900],[1920,1080]]).filter(([width])=>!process.env.USEDCAR_WIDTH || width===Number(process.env.USEDCAR_WIDTH))){
+ for(const [w,h] of (online?[[390,844],[430,932],[1280,800],[1440,900],[1920,1080]]:[[375,667],[390,844],[430,932],[1280,800],[1440,900],[1920,1080]]).filter(([width])=>!process.env.USEDCAR_WIDTH || width===Number(process.env.USEDCAR_WIDTH))){
  const ctx=await browser.newContext({viewport:{width:w,height:h},hasTouch:w<500,isMobile:w<500,reducedMotion:'reduce'});
  await ctx.addInitScript(()=>{window.__vibes=[];window.__tones=0;try{navigator.vibrate=n=>{window.__vibes.push(n);return true;};}catch(_){}const Base=window.AudioContext;if(Base)window.AudioContext=class extends Base{createOscillator(){window.__tones++;return super.createOscillator();}};});
  const p=await ctx.newPage();p.on('pageerror',e=>result.errors.push(w+': '+e.message));p.on('response',r=>{if(r.status()>=400)result.errors.push(r.status()+' '+r.url());});p.on('console',m=>{if(m.type()==='error')result.errors.push(m.text());});

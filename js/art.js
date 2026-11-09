@@ -319,13 +319,15 @@ G.CONFIG.keyart = 'a';
     if (!G.ASSET_PACK.endings) return null;
     return `<img class="ending-img" src="${A(`endings/ending_${id}`)}" alt="">`;
   };
-  G.Art.keyart = function () {
+  G.Art.keyart = function ({ share = false } = {}) {
     const choice = ['a', 'b', 'c'].includes(G.CONFIG.keyart) ? G.CONFIG.keyart : 'a';
     const variant = G.ASSET_PACK.ui ? choice : 'b';
     const car = (catId, color, place) => `<div class="keyart-car keyart-car-${place}">${G.Art.car({ id: 400 + color, catId, color, flaws: [] }, { size: 480, plain: true })}<i class="keyart-price"></i>${place === 'front' ? '<i class="keyart-rind"></i>' : ''}</div>`;
+    // A 开始页所有尺寸统一用竖图，保住车商的脸；横图仅供分享图构建，文件保留。
+    const desktop = variant === 'c' || share ? `<source media="(min-width: 1000px)" srcset="${A(`ui/keyart_${variant}_desktop`)}">` : '';
     const scene = variant === 'b'
       ? `<div class="keyart-code-scene" aria-hidden="true"><div class="keyart-ground"></div>${car('classic', 6, 'back')}${car('suv', 3, 'middle')}${car('family', 7, 'front')}</div>`
-      : `<picture class="keyart-picture"><source media="(min-width: 1000px)" srcset="${A(`ui/keyart_${variant}_desktop`)}"><img src="${A(`ui/keyart_${variant}_mobile`)}" width="1122" height="1402" alt="" fetchpriority="high" decoding="async"></picture>`;
+      : `<picture class="keyart-picture">${desktop}<img src="${A(`ui/keyart_${variant}_mobile`)}" width="1122" height="1402" alt="" fetchpriority="high" decoding="async"></picture>`;
     return `<section class="keyart keyart-${variant}" data-keyart="${variant}" aria-labelledby="start-title">${scene}<div class="keyart-copy"><h1 id="start-title" class="keyart-title"><span>瓜皮</span>二手车</h1><p class="keyart-subtitle">二手车商模拟器</p><p class="keyart-tagline">钱和良心，总得守住一个。</p></div></section>`;
   };
 

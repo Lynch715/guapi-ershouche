@@ -1,6 +1,6 @@
-/* 三案 × 四尺寸的开始页验收；由 browser-check.js 调用，不影响游戏运行。 */
+/* 三案 × 五尺寸的开始页验收；由 browser-check.js 调用，不影响游戏运行。 */
 const path = require('path');
-module.exports = async function keyartCheck(browser, url, out, check, result, prefix='t05') {
+module.exports = async function keyartCheck(browser, url, out, check, result, prefix='t06') {
   result.keyarts = [];
   for (const [width, height] of [[390,844],[430,932],[1280,800],[1440,900],[1920,1080]]) {
     const ctx = await browser.newContext({ viewport:{width,height}, hasTouch:width<500, isMobile:width<500, reducedMotion:'reduce' });
@@ -32,14 +32,17 @@ module.exports = async function keyartCheck(browser, url, out, check, result, pr
         check(info.headings===1&&!info.sticker,label+' 唯一叠图标题且无方块贴纸');
         check(info.font>=40,label+' 标题至少40px');
         check(info.ink.x>=info.hero.x&&info.ink.right<=info.hero.right&&info.ink.y>=info.hero.y&&info.copy.bottom<=info.hero.bottom,label+' 标题和文案完整在首图内');
-        check(info.menu.bottom<=info.hero.y||info.menu.x>=info.hero.right,label+' 菜单不覆盖首图');
+        if(width<1000) {
+          check(Math.abs(info.menu.y-info.hero.y-12)<.5&&Math.abs(info.hero.right-info.menu.right-12)<.5,label+' 菜单在图内右上内缩12px');
+          check(info.ink.right<=info.menu.x||info.ink.bottom<=info.menu.y||info.ink.y>=info.menu.bottom,label+' 悬浮菜单不遮标题');
+        } else check(info.menu.x>=info.hero.right,label+' 电脑菜单不覆盖首图');
         check(info.fits,label+' 无横向溢出');
         check(info.visibleCardFraction>=.5,label+' 首屏看见至少半张启动资金卡');
         check(!info.moving,label+' 减少动态效果不播放动画');
         if(variant==='b')check(info.filters.includes('url(#artTint7)')&&info.filters.length===3,label+' 复用三辆车与绿色染色');
         else {
           check(info.image.ok&&info.image.fit===(variant==='a'&&width>=1000?'cover':'contain'),label+' 图片加载及当前构图适配');
-          check(info.image.url.endsWith('keyart_'+variant+'_'+(width<1000?'mobile':'desktop')+'.webp'),label+' 使用对应尺寸独立构图');
+          check(info.image.url.endsWith('keyart_'+variant+'_'+(variant==='a'||width<1000?'mobile':'desktop')+'.webp'),label+' 使用指定构图');
         }
         // 百分比布局存在子像素舍入；容许半个 CSS 像素，仍严格限制在招牌内。
         if(variant==='c')check(info.copy.y+.5>=info.hero.y+info.hero.height*.06&&info.copy.bottom-.5<=info.hero.y+info.hero.height*(width<1000?.345:.395),label+' 文字位于实测招牌边界');
