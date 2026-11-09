@@ -5,7 +5,7 @@ const fs=require('fs'),path=require('path');const {chromium}=require(process.env
 const root=path.resolve(__dirname,'..'),url=process.env.USEDCAR_TEST_URL||'http://127.0.0.1:8893/';
 const online=/^https:\/\/[^/]+\.github\.io\//.test(url);if(!online&&!/^http:\/\/(localhost|127\.0\.0\.1):\d+\/$/.test(url))throw new Error('请使用本地预览或 Pages 地址');
 const out=path.join(root,'_screens');const result={url,checks:[],errors:[],viewports:[],buttons:[],performance:{}};
-const prefix=process.env.USEDCAR_EVIDENCE_PREFIX||'t06';fs.mkdirSync(out,{recursive:true});
+const prefix=process.env.USEDCAR_EVIDENCE_PREFIX||'t07';fs.mkdirSync(out,{recursive:true});
 function check(value,msg){result.checks.push({pass:!!value,msg});if(!value)throw new Error(msg);}
 const act=(p,name)=>p.locator(`[data-act="${name}"]`);
 async function click(p,name){const el=act(p,name).first();const disabled=await el.isDisabled();if(disabled)await el.evaluate(e=>e.scrollIntoView({block:'center'}));await el.click({force:disabled});result.buttons.push(name);}
@@ -51,6 +51,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await snapshot(p,prefix+'-menu-flow-'+w+(online?'-online':''));
  result.viewports.push({width:w,height:h});await ctx.close();
  }
+ if(!process.env.USEDCAR_WIDTH)await require('./safe-area-check')(browser,url,out,check,result,prefix,online);
  if(!online){
  const ctx=await browser.newContext({viewport:{width:430,height:932},reducedMotion:'no-preference'});const p=await ctx.newPage();await p.goto(url);await p.evaluate(()=>{G.newGame('small','suburb',1100);G.ui.tab='buy';G.render();});
  const t=await p.evaluate(()=>{document.querySelector('[data-act="end-month"]').click();document.querySelector('[data-act="end-month"]').click();return performance.now();});await p.locator('.report').waitFor();const duration=await p.evaluate(t=>performance.now()-t,t);check(await p.evaluate(()=>G.state.month)===2,'连点只结算一个月');check(duration>=600&&duration<1500,'月份过场约 700ms');result.performance.transitionMs=duration;await p.waitForFunction(()=>!document.querySelector('[data-counting]'));

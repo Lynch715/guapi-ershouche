@@ -57,7 +57,7 @@
 .start .pick input[type=radio]:focus-visible { outline:2px solid var(--blue); outline-offset:1px; border-radius:50%; }
 @media(min-width:1000px) {
   #app.at-start { max-width:none; padding:24px; min-height:100vh; min-height:100dvh;
-    display:flex; align-items:center; justify-content:center; }
+    padding-top:calc(24px + var(--safe-area-top)); display:flex; align-items:center; justify-content:center; }
   .at-start .start { position:relative; width:100%; max-width:1200px; padding:0; gap:40px;
     grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:stretch; }
   .at-start .start > .toolbar { position:absolute; top:0; right:0; margin:0; z-index:3; }
@@ -79,25 +79,36 @@
   .at-start .start-options .picks { gap:12px; }
   .at-start .pick-funds > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; width:100%; }
   .at-start .pick-funds .muted { grid-column:1 / -1; }
-  .at-start .pick-location > div { display:grid; grid-template-columns:72px minmax(0,1fr); column-gap:12px; row-gap:2px; width:100%; }
-  .at-start .pick-location .loc-art { grid-column:1; grid-row:1 / 4; align-self:center; width:72px; }
-  .at-start .pick-location .loc-art .store-scene { margin:0; }
-  .at-start .pick-location b, .at-start .pick-location span { grid-column:2; }
+  .at-start .pick-location { display:grid; grid-template-columns:160px 44px minmax(0,1fr); gap:10px; align-items:center; padding:8px; }
+  .at-start .pick-location .loc-art { display:block; width:160px; grid-column:1; }
+  .at-start .pick-location .loc-copy { display:flex; flex-direction:column; gap:2px; grid-column:3; width:100%; }
+  .at-start .pick-location .loc-art .store-scene { height:80px; aspect-ratio:2/1; margin:0; }
   .at-start .pick-location .muted { font-size:12px; }
   .at-start .start-options > .picks:last-of-type { margin-bottom:24px; }
   .at-start .start-options > [data-act=start] { margin-top:0; }
 }
 /* 较矮的电脑屏幕也容纳已有存档的“继续”按钮；手机不受影响。 */
 @media(min-width:1000px) and (max-height:850px) {
-  #app.at-start { padding:12px; }
+  #app.at-start { padding:12px; padding-top:calc(12px + var(--safe-area-top)); }
   .at-start .start-options .picks { gap:10px; }
   .at-start .start-options > h3 { margin-top:20px; }
+  .at-start .pick-location { padding:6px; }
+  .at-start .pick-funds { padding:10px 12px; }
 }
 /* 手机菜单浮在首图内，不再占一行；A/B标题下移到按钮下方的天空留白。 */
 @media(max-width:999px) {
-  .start { position:relative; }
-  .start > .toolbar { position:absolute; top:28px; right:28px; z-index:3; margin:0; }
+  .start { position:relative; padding-top:calc(16px + var(--safe-area-top)); }
+  .start > .toolbar { position:absolute; top:calc(28px + var(--safe-area-top)); right:28px; z-index:3; margin:0; }
   .start > .toolbar .icon-button { background:rgba(17,18,21,.65); border-color:#ffffff26;
     -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); box-shadow:0 2px 8px #0003; }
   .start .keyart-a .keyart-copy, .start .keyart-b .keyart-copy { top:14%; }
+  .start .pick-location { display:grid; grid-template-columns:44px minmax(0,1fr); gap:12px 8px; padding:0 12px 12px; overflow:hidden; }
+  .start .pick-location .loc-art { display:block; grid-column:1 / -1; width:calc(100% + 24px); margin:0 -12px; border-radius:11px 11px 0 0; overflow:hidden; }
+  .start .pick-location .loc-art .store-scene { width:100%; height:auto; aspect-ratio:2.4/1; border-radius:0; margin:0; }
+  .start .pick-location input { align-self:center; }
+  .start .pick-location .loc-copy { grid-column:2; }
 }
+/* 只调整预览取景：门店偏左，为右侧高楼/烟囱留位置，前景地面可见。 */
+.start .loc-art .store-scene { background-position:center bottom; filter:brightness(1.25); }
+.start .loc-art .store-building { height:82%; bottom:4%; left:36%; }
+.start .loc-art svg { height:auto; aspect-ratio:2.4/1; margin:0; }

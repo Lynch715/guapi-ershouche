@@ -10,6 +10,7 @@ module.exports=async function startScreenCheck(page,width,height,out,check,resul
       image:{box:box(image),width:image.naturalWidth,height:image.naturalHeight,fit:imageStyle.objectFit,position:imageStyle.objectPosition},textRects,
       menuStyle:{background:getComputedStyle(button).backgroundColor,blur:getComputedStyle(button).backdropFilter||getComputedStyle(button).webkitBackdropFilter},
       resources:performance.getEntriesByType('resource').map(r=>r.name).filter(s=>s.includes('/ui/keyart_')),
+      locations:[...document.querySelectorAll('.pick-location')].map(card=>{const art=card.querySelector('.loc-art'),scene=art.querySelector('.store-scene'),building=scene.querySelector('.store-building'),input=card.querySelector('input');return {id:input.value,card:box(card),art:box(art),scene:box(scene),building:box(building),copy:box(card.querySelector('.loc-copy')),input:box(input),loaded:building.complete&&building.naturalWidth>0,src:building.getAttribute('src'),background:getComputedStyle(scene).backgroundImage,radius:getComputedStyle(card).borderTopLeftRadius,artRadius:getComputedStyle(art).borderTopLeftRadius,clip:getComputedStyle(card).overflow};}),
       boxes:[...document.querySelectorAll('.start,.keyart,.keyart-copy,.start-options,.pick,.start h3,.start button')].map(e=>box(e)),
       radios:[...document.querySelectorAll('.start input[type=radio]')].map(e=>{const base=getComputedStyle(e),ring=getComputedStyle(e,'::before'),dot=getComputedStyle(e,'::after');return {checked:e.checked,hit:box(e),background:base.backgroundColor,border:ring.borderColor,borderWidth:ring.borderWidth,opacity:dot.opacity};})};
   });
@@ -27,6 +28,12 @@ module.exports=async function startScreenCheck(page,width,height,out,check,resul
   data.face=region([820,750,1100,1060]);data.car=region([130,660,850,1320]);
   check(visible(data.face),label+' 墨镜车商整脸未被裁掉');check(visible(data.car),label+' 西瓜车和瓜皮帽保留');
   check(data.textRects.every(r=>r.bottom<data.car.y),label+' 标题文案在天空区域');
+  check(data.locations.length===3&&new Set(data.locations.map(l=>l.background)).size===3,label+' 三种独立地段背景');
+  check(data.locations.every(l=>l.loaded&&l.src.endsWith('store_l1.webp')&&l.background.includes('bg_'+l.id+'.webp')),label+' 地段背景和一级门店合成且加载完成');
+  if(width<1000){
+    check(data.locations.every(l=>Math.abs(l.scene.width/l.scene.height-2.4)<.01&&Math.abs(l.scene.x-l.card.x-1)<.5&&Math.abs(l.scene.width-l.card.width+2)<.5&&Math.abs(l.scene.y-l.card.y-1)<.5),label+' 手机缩略图2.4比1并贴合卡片内边框');
+    check(data.locations.every(l=>l.input.y>=l.scene.bottom&&l.copy.y>=l.scene.bottom&&l.clip==='hidden'&&parseFloat(l.radius)-parseFloat(l.artRadius)===1),label+' 圆点文字在图下且缩略图圆角对齐金框');
+  }else check(data.locations.every(l=>Math.abs(l.scene.width-160)<.5&&Math.abs(l.scene.height-80)<.5&&l.scene.right<=l.copy.x),label+' 电脑160×80左图右文');
   if(width>=1000){
     check(data.start.width<=1200.5&&Math.abs(data.start.x+data.start.width/2-width/2)<.5,label+' 内容最大1200px且水平居中');
     check(Math.abs(data.start.y+data.start.height/2-height/2)<.5,label+' 内容垂直居中');
@@ -44,6 +51,14 @@ module.exports=async function startScreenCheck(page,width,height,out,check,resul
     check(data.menuStyle.background==='rgba(17, 18, 21, 0.65)'&&data.menuStyle.blur==='blur(6px)',label+' 菜单半透明深底和轻微毛玻璃');
   }
   await page.screenshot({path:path.join(out,prefix+(online?'-online':'')+(width>=1000?'-desktop-':'-mobile-')+width+'.png')});
+  if([390,430,1280].includes(width)){
+    await page.evaluate(()=>{const title=[...document.querySelectorAll('.start-options>h3')].find(e=>e.textContent==='门店地段');scrollTo(0,scrollY+title.getBoundingClientRect().y-12);});
+    await page.screenshot({path:path.join(out,prefix+(online?'-online':'')+'-locations-context-'+width+'.png')});
+    await page.locator('.start-options>.picks').last().screenshot({path:path.join(out,prefix+(online?'-online':'')+'-locations-'+width+'.png')});
+    await page.locator('.pick-location .loc-art').first().click();
+    check(await page.locator('input[name=loc]').first().isChecked(),label+' 点击缩略图也能选择地段');
+    await page.locator('input[name=loc]').nth(1).check();await page.evaluate(()=>scrollTo(0,0));
+  }
   if(width===390&&!online){
     await page.screenshot({path:path.join(out,prefix+'-mobile-after-full.png'),fullPage:true});
     const before=path.join(out,'t05-browser-results.json');

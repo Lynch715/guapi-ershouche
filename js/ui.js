@@ -83,8 +83,9 @@ var G = globalThis.G = globalThis.G || {};
       </label>`).join('');
     const locs = Object.entries(G.LOCATIONS).map(([id, l], i) => `
       <label class="pick pick-location">
+        <div class="loc-art">${G.Art.store(1, id)}</div>
         <input type="radio" name="loc" value="${id}" ${i === 1 ? 'checked' : ''}>
-        <div><div class="loc-art">${G.Art.store(1, id, { empty: true })}</div><b>${l.name}</b><span>${l.desc}</span>
+        <div class="loc-copy"><b>${l.name}</b><span>${l.desc}</span>
           <span class="muted">租金 ${level3(l.rent, 0.8, 1.1)} · 客流 ${level3(l.traffic, 1, 1.5)} · 抽查 ${level3(l.inspect, 0.05, 0.09)}</span></div>
       </label>`).join('');
     return `

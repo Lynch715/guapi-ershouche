@@ -33,6 +33,12 @@
 
 引导、静音、震动偏好单独保存，不混入存档。旧存档没有开张日期时会显示记不清的老店，不编造时间。
 
+## 主屏幕安全区与地段预览
+
+地段卡直接复用 `G.Art.store(1, 地段)`，显示该地段背景和一级门店。手机为卡片顶部全宽2.4:1，圆点与说明在图下；电脑为160×80左图右文。缩略图单独取景与提亮，露出高楼、烟囱、展厅和彩旗，不修改原素材。
+
+顶部固定遮挡条使用 `--safe-area-top: env(safe-area-inset-top, 0px)`，在普通页面上层、弹窗下层；开始页、HUD、提示条和弹窗统一避开该区域。普通浏览器环境为0时不占额外空间。开发验收可覆盖变量为47px，截图逐像素核对顶部底色；这是模拟检查，不能替代实体iPhone主屏模式验收。
+
 ## 图标与美术
 
 瓜皮车图标是原创代码绘制，采用深浅绿车身、瓜皮帽、金色双轮与深色背景；没有使用真实公司的图形或广告语。所有标准 favicon、苹果主屏幕和分享图保留 PNG / ICO。
@@ -83,7 +89,8 @@ docs/preview.webp        游戏截图
 tools/test-events.js     引擎与存档回归
 tools/browser-check.js   可选 Playwright 浏览器验收
 tools/keyart-check.js    三案五尺寸首图检查与截图
-tools/start-screen-check.js  开始页布局、单选与手机对照检查
+tools/start-screen-check.js  开始页布局、单选、地段缩略图检查
+tools/safe-area-check.js  47px安全区滚动与弹窗逐像素检查
 tools/keyart-compare.py  首图截图联系表
 tools/build_share.js     当前首图的 CSS 分享图
 tools/text-audit.js      玩家文案提取

@@ -1,10 +1,14 @@
 /* 暗色 + 金色，移动端优先 */
 :root {
+  /* 默认跟随设备；浏览器验收可注入47px，不改环境或存档。 */
+  --safe-area-top: env(safe-area-inset-top, 0px);
   --bg: #111215; --card: #1b1d22; --card2: #23262d; --line: #2e3139;
   --text: #ecedf0; --muted: #8b8f99; --gold: #e2b866; --gold2: #f3d28f;
   --orange: #f08a3c; --red: #ef5350; --green: #3dd68c; --blue: #3b8cff;
 }
 * { box-sizing: border-box; }
+.safe-area-shield { position:fixed; top:0; left:0; right:0; height:var(--safe-area-top);
+  z-index:9; background:var(--bg); pointer-events:none; }
 html, body { margin: 0; background: var(--bg); color: var(--text);
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; font-size: 15px; }
 #app { max-width: 520px; margin: 0 auto; padding-bottom: 96px; }
@@ -114,7 +118,7 @@ th { color: var(--muted); font-weight: normal; }
 .bar-bottom .btn { max-width: 492px; margin: 0 auto; }
 
 /* 弹窗 */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
+.overlay { position: fixed; inset: var(--safe-area-top) 0 0; background: rgba(0,0,0,.72); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
 .modal { background: var(--bg); border: 1px solid var(--line); border-radius: 18px 18px 0 0; width: 100%; max-width: 520px;
   max-height: 92vh; display: flex; flex-direction: column; }
 .modal h3 { padding: 16px 16px 8px; font-size: 18px; color: var(--gold); }
@@ -135,9 +139,11 @@ th { color: var(--muted); font-weight: normal; }
 .pnl div { display: flex; flex-direction: column; } .pnl small { color: var(--muted); } .pnl b { font-size: 17px; }
 
 /* toast */
-#toast { position: fixed; left: 50%; top: 16px; transform: translate(-50%, -80px); background: #2b2f37; color: var(--text);
-  padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 30; transition: transform .25s; max-width: 90vw; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
-#toast.show { transform: translate(-50%, 0); }
+#toast { position: fixed; left: 50%; top: 16px; transform: translate(-50%, 8px); background: #2b2f37; color: var(--text);
+  padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 30; transition: transform .25s,opacity .25s;
+  opacity:0; visibility:hidden; pointer-events:none; clip-path:inset(-16px -48px -48px -48px);
+  max-width: 90vw; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+#toast.show { transform: translate(-50%, 0); opacity:1; visibility:visible; }
 #toast.bad { background: #4a1f20; color: #ffd0cd; }
 
 /* 团队 */
@@ -289,12 +295,12 @@ button, .tabs, .card, .pick, .tutorial-card { -webkit-user-select:none; user-sel
 input, select, textarea { font-size:16px !important; -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
 img { -webkit-user-drag:none; }
 button, .btn, .btn.sm, .tabs button, input[type=radio], input[type=checkbox] { min-height:44px; min-width:44px; }
-.hud { padding-top:calc(12px + env(safe-area-inset-top)); }
+.hud { padding-top:calc(12px + var(--safe-area-top)); }
 #app { padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
 .bar-bottom { padding-left:max(14px, env(safe-area-inset-left)); padding-right:max(14px, env(safe-area-inset-right)); }
-.overlay { padding-top:env(safe-area-inset-top); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
-.modal { max-height:92vh; max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px); }
-#toast { top:calc(16px + env(safe-area-inset-top)); }
+.overlay { padding-top:0; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+.modal { max-height:calc(100vh - var(--safe-area-top) - env(safe-area-inset-bottom) - 16px); max-height:calc(100dvh - var(--safe-area-top) - env(safe-area-inset-bottom) - 16px); }
+#toast { top:calc(16px + var(--safe-area-top)); }
 /* 任务 03：经营动作的反馈 */
 .btn { transition:transform 80ms ease,filter 80ms ease; }
 .btn:active, .tabs button:active { transform:scale(.96); filter:brightness(.88); }
@@ -336,7 +342,7 @@ main { padding:12px 16px; }
 .start { padding:16px; } .start h3 { margin:24px 0 12px; }
 .start .sub { margin-bottom:24px; }
 .toolbar { gap:8px; margin-bottom:8px; }
-.hud { padding:calc(12px + env(safe-area-inset-top)) 16px 12px; }
+.hud { padding:calc(12px + var(--safe-area-top)) 16px 12px; }
 .hud-top { margin-bottom:12px; } .hud-grid { gap:8px; }
 .tabs { padding:8px 16px 0; gap:4px; }
 .modal h3 { padding:16px 16px 8px; }
@@ -372,12 +378,12 @@ th,td { font-size:12px; padding:8px 4px; }
 .icon-button { padding:8px; width:44px; height:44px; flex:none; margin:0; }
 .toolbar { margin:0; }
 .hud { position:sticky; }
-.hud > .toolbar { position:absolute; top:calc(8px + env(safe-area-inset-top)); right:16px; }
+.hud > .toolbar { position:absolute; top:calc(8px + var(--safe-area-top)); right:16px; }
 .hud-top { min-height:44px; padding-right:52px; }
 .start > .toolbar { margin-bottom:8px; }
 .modal-heading { display:flex; align-items:center; justify-content:space-between; padding-right:12px; gap:8px; }
 .modal-heading h3 { min-width:0; }
-.save-menu { height:100vh; height:100dvh; max-height:100vh; max-height:100dvh; border-radius:16px 16px 0 0; }
+.save-menu { height:calc(100vh - var(--safe-area-top)); height:calc(100dvh - var(--safe-area-top)); max-height:calc(100vh - var(--safe-area-top)); max-height:calc(100dvh - var(--safe-area-top)); border-radius:16px 16px 0 0; }
 .save-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; background:var(--card); padding:16px; border-radius:12px; margin-bottom:16px; }
 .save-summary span { display:flex; flex-direction:column; font-size:12px; color:var(--muted); }
 .save-summary span:first-child { grid-column:1 / -1; }
@@ -386,10 +392,14 @@ th,td { font-size:12px; padding:8px 4px; }
 .menu-version { margin:24px 0 16px; text-align:center; color:var(--muted); font-size:12px; }
 .save-file-label { position:relative; cursor:pointer; }
 .save-file-label input { position:absolute; opacity:0; width:100%; height:100%; inset:0; cursor:pointer; }
-@media(min-width:1000px) { .save-menu { height:auto; max-height:90vh; max-height:90dvh; max-width:640px; border-radius:16px; } }
+@media(min-width:1000px) {
+ .modal { max-height:calc(100vh - var(--safe-area-top) - env(safe-area-inset-bottom) - 32px); max-height:calc(100dvh - var(--safe-area-top) - env(safe-area-inset-bottom) - 32px); }
+ .tutorial-active .modal { max-height:calc(100vh - var(--safe-area-top) - 42px); max-height:calc(100dvh - var(--safe-area-top) - 42px); }
+ .save-menu { height:auto; max-height:min(90vh,calc(100vh - var(--safe-area-top) - 32px)); max-height:min(90dvh,calc(100dvh - var(--safe-area-top) - 32px)); max-width:640px; border-radius:16px; }
+}
 body.modal-open { position:fixed; overflow:hidden; width:100%; }
 .pick.is-picked { border-color:var(--gold); background:#24211a; }
 input,select,textarea { min-height:44px; min-width:44px; }
-.save-menu { padding-top:env(safe-area-inset-top); }
+.save-menu { padding-top:0; }
 /* 浅色财务卡上的金褐数字保证正文 AA 对比。 */
 .fin-card b.gold { color:#603900; }
