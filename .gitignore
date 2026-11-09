@@ -1,0 +1,13 @@
+assets/_source/
+assets/_ref/
+assets_original/
+_screens/
+CODEX_*.md
+ART_TASK_CODEX.md
+assets/PROGRESS.md
+assets/manifest.json
+**/__pycache__/
+*.pyc
+.DS_Store
+# 仅供本次中间版本反馈对照，不作为公开开发入口
+tools/t03-feedback-check.js

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>美术预览</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>body{padding:16px;max-width:none}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cell{background:#1b1d22;border-radius:10px;padding:8px;text-align:center;font-size:12px;color:#8b8f99}.stores{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stores svg{width:100%;height:auto;border-radius:10px}h2{color:#e2b866;margin:18px 0 8px}</style>
+</head><body>
+<h2>车型 × 状态</h2><div class="grid" id="cars"></div>
+<h2>车库</h2><div id="garage" style="max-width:420px"></div>
+<h2>门店：等级 × 地段</h2><div class="stores" id="stores"></div>
+<script>globalThis.G = { ASSET_BASE: "../assets/" };</script><script src="../js/data.js"></script><script src="../js/util.js"></script><script src="../js/car.js"></script>
+<script src="../js/game.js"></script><script src="../js/staff.js"></script><script src="../js/finance.js"></script><script src="../js/art.js"></script>
+<script>
+G.newGame('small','city',1);
+const states = [['干净', []], ['划痕+脏污', ['scratch','dirty']], ['轮胎老化', ['tires']], ['泡水', ['flood']], ['重大事故', ['majorAcc']], ['泡水（已掩盖）', ['flood!']]];
+let id = 1, html = '';
+for (const cat of Object.keys(G.CATEGORIES)) for (const [label, fl] of states.slice(0, cat === 'family' ? 6 : 2)) {
+  const car = { id: id++, catId: cat, flaws: fl.map(f => ({ id: f.replace('!',''), known: true, concealed: f.endsWith('!'), fixed: false })) };
+  html += `<div class="cell">${G.Art.car(car, { size: 220 })}<div>${G.CATEGORIES[cat].name} · ${G.paintOf(car).name} · ${label}</div></div>`;
+}
+document.getElementById('cars').innerHTML = html;
+const cars = Array.from({ length: 13 }, (_, i) => ({ id: i * 3 + 1, catId: Object.keys(G.CATEGORIES)[i % 6], flaws: [] }));
+document.getElementById('garage').innerHTML = G.Art.garage(cars, 20);
+let st = '';
+for (const lvl of [1,2,3,4,5]) for (const loc of ['city','suburb','autocity']) st += `<div class="cell">${G.Art.store(lvl, loc)}<div>${lvl} 级 · ${G.LOCATIONS[loc].name}</div></div>`;
+document.getElementById('stores').innerHTML = st;
+</script></body></html>
