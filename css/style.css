@@ -272,7 +272,7 @@ h4.sub { margin-top: 14px; font-size: 14px; color: var(--muted); }
 [hidden] { display:none !important; }
 .stock-pager { margin:12px 0; font-size:12px; }
 
-.save-text { display:block; width:100%; min-height:220px; margin-top:8px; padding:10px; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:10px; resize:vertical; font:12px/1.6 monospace; overflow-wrap:anywhere; }
+.save-file-info { padding:12px; margin:12px 0; background:var(--card); border:1px solid var(--line); border-radius:10px; line-height:1.6; overflow-wrap:anywhere; }
 .save-dialog .modal-foot { display:flex; gap:8px; flex-wrap:wrap; }
 .save-dialog .modal-foot .btn { flex:1; min-width:110px; }
 
@@ -402,7 +402,6 @@ th,td { font-size:12px; padding:8px 4px; }
 .empty { font-size:14px; padding:32px 16px; }
 .section { margin:24px 4px 12px; }
 .tutorial-card { padding:16px; } .tutorial-actions { gap:12px; margin-top:12px; }
-.save-text { font:16px/1.5 monospace; padding:12px; }
 @media(min-width:1000px) {
  #app { max-width:1120px; } .bar-bottom .btn { max-width:1088px; }
  .start { gap:32px; } .modal { max-width:800px; margin:16px; }
@@ -451,3 +450,23 @@ input,select,textarea { min-height:44px; min-width:44px; }
 .save-menu { padding-top:0; }
 /* 浅色财务卡上的金褐数字保证正文 AA 对比。 */
 .fin-card b.gold { color:#603900; }
+
+/* 收车与零售议价；三种策略在窄屏改成纵向，保留完整价格。 */
+.trade-actions { display:flex; gap:8px; margin-top:12px; }
+.trade-actions .btn { flex:1; margin:0; min-width:0; }
+.trade-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.trade-choices .btn { margin:0; padding:10px 6px; min-height:52px; }
+.trade-choices small { display:block; margin-top:4px; color:var(--muted); font-size:12px; }
+.trade-message { padding:12px; margin:12px 0; background:var(--card2); border-left:3px solid var(--gold); border-radius:8px; line-height:1.65; }
+.bargain-box { border-top:1px solid var(--line); margin-top:12px; padding-top:4px; }
+.bargain-box summary { cursor:pointer; padding:12px 0; min-height:44px; color:var(--gold); }
+.bargain-box p,.trade-note { margin:8px 0; font-size:14px; }
+.trade-log { margin:8px 0 12px; border:1px solid var(--line); border-radius:8px; padding:0 10px; }
+.trade-log summary { padding:10px 0; min-height:44px; color:var(--muted); cursor:pointer; font-size:13px; }
+.trade-log ol { padding-left:20px; margin:0 0 12px; font-size:13px; line-height:1.6; }
+.trade-log li + li { margin-top:8px; }
+.buyer-dialog .vals { flex-wrap:wrap; gap:12px; }
+.buyer-dialog .modal-foot .trade-actions { margin:0 0 8px; }
+.sales li.sale-no-art { grid-template-columns:minmax(0,1fr) auto; }
+.sales li.sale-no-art > small { grid-column:1 / -1; }
+@media(max-width:460px) { .trade-choices { grid-template-columns:1fr; } .trade-choices .btn { flex-direction:row; align-items:center; justify-content:space-between; gap:8px; min-height:44px; padding:10px 12px; } .trade-choices small { margin:0; } }

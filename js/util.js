@@ -32,3 +32,5 @@ G.fmt = function (n) {
   return (neg ? '-' : '') + s;
 };
 G.fmtKm = n => (n / 10000).toFixed(1) + '万公里';
+// 谈价以百元为一步，不能把不同报价都四舍五入成同一个整数“万”。
+G.fmtTrade = n => Math.abs(n) >= 10000 ? (n / 10000).toFixed(Math.round(n) % 100 === 0 ? 2 : 4) + '万' : Math.round(n) + '元';

@@ -4,9 +4,27 @@
  * ========================================================= */
 var G = globalThis.G = globalThis.G || {};
 
-G.VERSION = 'v1.0';
+G.VERSION = 'v1.1';
+// 议价按车辆分别记录，最多三轮；只有主动接待新买家花行动点。
+G.TRADE = {
+  rounds: 3, buyerAP: 1,
+  firmQuoteRate: { private: 0.12, dealer4s: 0.28, peer: 0.30, wreck: 0.10 },
+  cuts: { gentle: { name: '试探砍价', rate: 0.03 }, firm: { name: '认真压价', rate: 0.07 }, hard: { name: '狠砍一刀', rate: 0.12 } },
+  counters: { gentle: { name: '多让一点', share: 0.25 }, firm: { name: '各退一步', share: 0.5 }, hard: { name: '坚持原价', share: 1 } },
+  styles: [
+    { name: '爽快型', hint: '说话痛快，合理的价格容易谈拢', floor: [0.84, 0.90], patience: 4, concede: 0.65, buyerConcede: 0.55,
+      seller: { accept: '行，{price}，痛快给你。', counter: ['这个价接不住。{price}，咱们各退一步。', '我再挪一点，{price}，你也给个准话。'], firm: '已经让到{price}，再低真聊不下去了。', leave: '你这刀太狠，今天不卖了。' },
+      buyer: { open: '{price}，合适我今天就开走。', accept: '行，{price}，办手续吧！', counter: ['我也往上加一点，{price}，你看行不行？', '再凑到{price}，咱们都爽快点。'], firm: '我最多就出{price}，再加真没有了。', leave: '价钱差太多，今天先算了。' } },
+    { name: '精打细算型', hint: '每一笔都要算，得多拉扯两句', floor: [0.90, 0.95], patience: 4, concede: 0.45, buyerConcede: 0.18,
+      seller: { accept: '{price}，账算得过来，就这么定。', counter: ['我这边也有成本，{price}，您再想想。', '已经给您抹了一笔，{price}，不能光我让呀。'], firm: '{price}就是底线，没法再抹了。', leave: '这账怎么算都不合适，换家看看吧。' },
+      buyer: { open: '先按{price}聊聊，我还得留点钱办手续。', accept: '{price}，算下来能接受，就定这个数。', counter: ['先别急着定，我算算……加到{price}怎么样？', '再从预算里挤一点，{price}，您也松松口。'], firm: '怎么算都只能到{price}，您给个准话吧。', leave: '这笔账还是对不上，我先不买了。' } },
+    { name: '急性子', hint: '不喜欢来回磨，试探太多会走人', floor: [0.88, 0.96], patience: 2, concede: 0.55, buyerConcede: 0.30,
+      seller: { accept: '{price}，就这么着，别再磨了。', counter: ['{price}，行就收，不行我去下一家。', '我赶时间，{price}，这回给个准话。'], firm: '就{price}，再问也一样。', leave: '这价没法聊，我先走了。' },
+      buyer: { open: '{price}，我就想今天把车定了。', accept: '{price}就{price}，别折腾了，成交！', counter: ['加到{price}，别让我来回跑。', '{price}，能不能卖给句话。'], firm: '{price}，这是最后一次问了。', leave: '磨半天还是谈不拢，别家看看去。' } },
+  ],
+};
 G.CONFIG = {
-  maxSaveChars: 10000000,    // 导入文本上限，防止误粘贴超大文件
+  maxSaveChars: 10000000,    // 导入大小上限，防止选中超大文件
   sealDark: 100,             // 黑化达到此值查封
   inspectSurgeAt: 70,         // 超过此值进入突击检查期
   // 过亿规模后，民间担保集中暴露；小本目标以下不改原有规则。

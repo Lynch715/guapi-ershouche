@@ -5,7 +5,7 @@
 var G = globalThis.G = globalThis.G || {};
 
 (function () {
-  const ui = G.ui = { tab: 'buy', stockPage: 1, report: null, result: null, help: false, saveDialog: null, settling: false, menu: false, confirm: null, importText: '', entry: null, newGameApproved: false };
+  const ui = G.ui = { tab: 'buy', stockPage: 1, buyerId: null, report: null, result: null, help: false, saveDialog: null, settling: false, menu: false, confirm: null, importData: '', entry: null, newGameApproved: false };
   let previousHUD = null, renderedState = null, lockedScroll = 0;
   function syncOverlay() {
     const open = !!document.querySelector('.overlay, .month-transition');
@@ -14,6 +14,7 @@ var G = globalThis.G = globalThis.G || {};
     else if (!open && wasOpen) { document.body.classList.remove('modal-open'); document.body.style.top = ''; window.scrollTo(0, lockedScroll); }
   }
   const fmt = n => G.fmt(n);
+  const dealFmt = n => G.fmtTrade(n);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const level3 = (v, lo, hi) => v >= hi ? '高' : v >= lo ? '中' : '低';
 
@@ -38,6 +39,7 @@ var G = globalThis.G = globalThis.G || {};
     return modal(`瓜皮二手车 · 经营指南`,
       section('行动点', `每月基础 ${c.apPerMonth} 点，月底刷新。看车、检测和部分整备会花点数；经理和技师能增加行动点，受门店上限限制。`) +
       section('收车渠道', Object.values(G.CHANNELS).map(ch => `${ch.name}：${ch.ap} 点，${ch.desc}。`).join('<br>')) +
+      section('买卖议价', '收车时可直接拒绝本批不想要的车，也可和卖家谈最多三轮，砍得太狠可能把人气走；拍卖平台按报价成交。库存中可一键降价3%，或花1点主动接待买家，选择让价、折中或坚持原价。每台车每月主动接待一位，谈好的报价可暂留，刷新不重抽；不主动接待也照常月底自动零售。') +
       section('车况与检测', `显性问题直接可见，隐性问题要检测。现场验车每台 ${fmt(c.offerInspectCost)}，一次验完一批；深度检测 ${G.SERVICES.inspect.ap} 点。评级越靠后，坑越深；“据你所知”也未必是真相。`) +
       section('隐瞒与黑化', `掩盖问题默认增加 ${c.concealDark} 黑化，重大问题另算。隐藏车况能抬高买家眼中的估值，但售后旧账会在潜伏 ${c.bombDormant.join('～')} 个月后继续追你 ${c.bombLifetime} 个月。`) +
       section('抽查与查封', `黑化超过 ${c.inspectSurgeAt} 进入突击检查期，达到 ${c.sealDark} 查封。每月自然回落 ${c.darkDecay}，主动报备减 ${c.reportDark}。规模超过 ${fmt(c.capitalRisk.threshold)} 后，隐瞒台账越多、黑化越高，越容易被盯上。`) +
@@ -50,6 +52,9 @@ var G = globalThis.G = globalThis.G || {};
   }
 
   function gradeBadge(g) { return `<span class="grade g${g}">${g}</span>`; }
+  function tradeHistory(n) {
+    return n?.history?.length > 1 ? `<details class="trade-log"><summary>查看本次报价记录（${n.history.length}条）</summary><ol>${n.history.map(h => `<li>${esc(h.text)}</li>`).join('')}</ol></details>` : '';
+  }
 
   function flawChips(car, mode) {
     // mode: 'offer' 收车时 / 'stock' 库存里
@@ -168,24 +173,44 @@ var G = globalThis.G = globalThis.G || {};
         : '';
     const offers = v.offers.length ? v.offers.map((o, i) => {
       const c = o.car, cat = G.CATEGORIES[c.catId];
-      const price = G.offerPrice(o), ref = G.Car.value(c, 'public');
+      const price = G.offerPrice(o), ref = G.Car.value(c, 'public'), n = o.negotiation;
+      const bargain = ch.blind ? '<p class="muted trade-note">平台报价成交，不支持议价</p>' : `<details class="bargain-box" ${n ? 'open' : ''}>
+        <summary>和卖家聊聊价${n ? ` · 已谈 ${n.rounds}/${G.TRADE.rounds} 轮` : ' · 最多3轮'}</summary>
+        ${n ? `<p class="muted">${G.TRADE.styles[n.style].name} · ${G.TRADE.styles[n.style].hint} · 耐心 ${n.patience}</p><p class="trade-message" role="status">${esc(n.message)}</p>${tradeHistory(n)}` : '<p class="muted">试着压一压价格；砍得越狠，卖家越容易走人。</p>'}
+        <div class="trade-choices">${Object.entries(G.TRADE.cuts).map(([key, cut]) => `<button class="btn sm" data-act="bargain" data-id="${c.id}" data-tactic="${key}" ${n?.rounds >= G.TRADE.rounds ? 'disabled' : ''}>${cut.name}<small>出价 ${dealFmt(Math.max(100, G.round(price * (1 - cut.rate), 100)))} · -${Math.round(cut.rate * 100)}%</small></button>`).join('')}</div>
+        ${n?.rounds >= G.TRADE.rounds ? '<p class="muted">已到最后报价，可以买下或拒绝。</p>' : ''}</details>`;
       return `
-        <div class="card offer">
+        <div class="card offer" data-offer="${c.id}">
           <div class="car-art">${G.Art.car(c, { size: 280 })}</div>
           <div class="row"><h4>${esc(c.name)}</h4>${gradeBadge(G.Car.grade(c, 'owner'))}</div>
           <p class="muted">${cat.name} · ${G.paintOf(c).name} · ${c.year}年 · ${kmText(c)}</p>
           ${flawChips(c, 'offer')}
           <div class="row price-row">
-            <div><small class="muted">卖家报价</small><b class="gold">${fmt(price)}</b></div>
+            <div><small class="muted">${n?.discount ? '议后报价' : '卖家报价'}</small><b class="gold">${dealFmt(price)}</b>${n?.discount ? `<small class="pos">已省 ${dealFmt(G.offerBasePrice(o) - price)}</small>` : ''}</div>
             <div><small class="muted">按已知车况估价</small><b>${fmt(ref)}</b></div>
-            <button class="btn primary" data-act="buy" data-i="${i}">买下</button>
           </div>
           ${ch.towFee ? `<small class="muted">另付拖车费 ${fmt(ch.towFee)}</small>` : ''}
+          ${bargain}
+          <div class="trade-actions"><button class="btn" data-act="reject" data-id="${c.id}">拒绝这台车</button><button class="btn primary" data-act="buy" data-i="${i}" data-id="${c.id}">买下</button></div>
         </div>`;
     }).join('') : '<p class="muted center">这一批车已经被你挑完了</p>';
     return modal(`${ch.name} · 看车`, `
       <p class="muted">库存 ${s.cars.length}/${G.capacity()} · 现金 ${fmt(s.cash)} · 剩余行动点 ${s.ap}</p>
-      ${inspectBtn}${offers}`, '<button class="btn" data-act="visit-close">离开</button>');
+      <p class="muted">本批待挑 ${v.offers.length} 台 · 拒绝不花钱或行动点</p>${v.message ? `<p class="trade-message" role="status">${esc(v.message)}</p>` : ''}
+      ${inspectBtn}${offers}`, '<button class="btn" data-act="visit-close">离开</button>', 'visit-dialog');
+  }
+
+  function buyerModal(car) {
+    const b = car.buyer, style = G.TRADE.styles[b.style], left = b.status === 'left';
+    return modal(`${car.name} · 买家议价`, `<div class="car-art">${G.Art.car(car, { size: 260 })}</div>
+      <p class="muted">${style.name} · ${style.hint}</p><p class="muted">已谈 ${b.rounds}/${G.TRADE.rounds} 轮 · 耐心 ${b.patience} · 本月接待已花 ${G.TRADE.buyerAP} 点</p>
+      <div class="row vals"><div><small class="muted">本次挂牌参考</small><b>${dealFmt(b.anchor)}</b></div><div><small class="muted">${left ? '离场前报价' : '买家当前报价'}</small><b class="gold">${dealFmt(b.quote)}</b></div><div><small class="muted">成交毛利</small><b class="${b.quote >= car.cost ? 'pos' : 'neg'}">${dealFmt(b.quote - car.cost)}</b></div></div>
+      <p class="muted trade-note">本次方案：${G.WARRANTY[b.terms?.warranty || car.warranty].name} · ${G.BUYER_FINANCE[b.terms?.finance || car.finance || 'none'].name}。改车况或方案会重新核价。</p>
+      <p class="trade-message" role="status">${esc(b.message)}</p>
+      ${tradeHistory(b)}
+      ${b.status === 'talking' ? `<h4>怎么还价？</h4><div class="trade-choices">${Object.entries(G.TRADE.counters).map(([key, c]) => `<button class="btn sm" data-act="buyer-counter" data-car="${car.id}" data-tactic="${key}">${c.name}<small>还价 ${dealFmt(G.buyerCounterPrice(b, key))}</small></button>`).join('')}</div><p class="muted">买家会逐轮让步；继续抬价可能谈崩，也可直接按当前报价成交。</p>` : ''}
+      ${left ? '<p class="muted">这台车本月仍照常挂牌，月底可卖给其他客户；下月可再主动接待。</p>' : ''}`,
+      `${left ? '' : `<div class="trade-actions"><button class="btn" data-act="buyer-dismiss" data-car="${car.id}">不卖了，送客</button><button class="btn primary" data-act="buyer-accept" data-car="${car.id}">按 ${dealFmt(b.quote)} 成交</button></div>`}<button class="btn" data-act="buyer-close">返回库存</button>`, 'buyer-dialog');
   }
 
   function pledgeModal() {
@@ -234,12 +259,13 @@ var G = globalThis.G = globalThis.G || {};
           <div><small class="muted">按已知车况估价</small><b>${fmt(vO)}${c.inspected ? '' : '?'}</b></div>
         </div>
         <div class="row list-row">
-          <label>挂牌价 <input type="number" step="0.1" min="0" data-price="${c.id}" value="${(c.price / 10000).toFixed(1)}"> 万</label>
+          <label>挂牌价 <input type="number" step="0.01" min="0" data-price="${c.id}" value="${(c.price / 10000).toFixed(2)}"> 万</label>
           ${c.autoPrice !== false ? '<span class="chip chip-fixed">自动跟随估值</span>' : `<button class="btn sm" data-act="suggest" data-car="${c.id}">恢复自动定价</button>`}
           <select data-warranty="${c.id}">${Object.entries(G.WARRANTY).map(([k, w]) => `<option value="${k}" ${c.warranty === k ? 'selected' : ''}>${w.name}</option>`).join('')}</select>
           <select data-finance="${c.id}" title="给买家的金融方案">${Object.entries(G.BUYER_FINANCE).map(([k, f]) => `<option value="${k}" ${(c.finance || 'none') === k ? 'selected' : ''}>${f.name}${f.fee ? ` +${Math.round(f.fee * 100)}%服务费` : ''}</option>`).join('')}</select>
         </div>
         <small class="${margin >= 0 ? 'pos' : 'neg'}">按挂牌价成交 毛利 ${fmt(margin)}</small>
+        <div class="trade-actions"><button class="btn sm" data-act="reduce-price" data-car="${c.id}">降价 3%</button><button class="btn sm primary" data-act="buyer-meet" data-car="${c.id}">${c.buyer?.month === G.state.month ? c.buyer.status === 'left' ? '查看本月洽谈' : '继续和买家谈' : `接待买家 · ${G.TRADE.buyerAP}点`}</button></div>
         ${svcs ? `<div class="svcs">${svcs}</div>` : ''}
         <div class="row foot"><span class="muted">急用钱？</span>
           <button class="btn sm" data-act="peer" data-car="${c.id}">批发给同行 ${fmt(G.peerPrice(c))}</button></div>
@@ -415,7 +441,7 @@ var G = globalThis.G = globalThis.G || {};
   }
   function reportModal(r) {
     const sales = r.sales.length
-      ? `<ul class="sales">${r.sales.map((x,i) => `<li style="animation-delay:${i*80}ms">${x.art || ''}<span>${esc(x.name)}${x.warranty ? ` <small class="muted">${x.warranty}</small>` : ''}</span><b>${fmt(x.price)}</b><small class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.profit >= 0 ? '+' : ''}${fmt(x.profit)}</small></li>`).join('')}</ul>`
+      ? `<ul class="sales">${r.sales.map((x,i) => `<li class="${x.art ? '' : 'sale-no-art'}" style="animation-delay:${i*80}ms">${x.art || ''}<span>${esc(x.name)}${x.warranty ? ` <small class="muted">${esc(x.warranty)}</small>` : ''}</span><b>${dealFmt(x.price)}</b><small class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.profit >= 0 ? '+' : ''}${dealFmt(x.profit)}</small></li>`).join('')}</ul>`
       : '<p class="muted">这个月一台都没卖出去</p>';
     const lines = r.lines.map(l => `<li class="log-${esc(l.type)}">${esc(l.text)}</li>`).join('');
     return modal(`${r.date} 月结`, `
@@ -474,19 +500,24 @@ var G = globalThis.G = globalThis.G || {};
     if (s.over) return overModal();
     if (s.visit) return visitModal();
     if (s.pledgeVisit) return pledgeModal();
+    const buyerCar = s.cars.find(c => c.id === ui.buyerId && c.buyer?.month === s.month);
+    if (buyerCar) return buyerModal(buyerCar);
+    ui.buyerId = null;
     return '';
   }
 
   /* ---------- 渲染 ---------- */
   function render() {
     const app = document.getElementById('app');
+    const oldModal = app.querySelector('.modal');
+    const modalScroll = oldModal ? { title: oldModal.getAttribute('aria-label'), top: oldModal.querySelector('.modal-body').scrollTop } : null;
     const resume = !G.state ? G.SaveSlots.resume() : null;
     const slots = !G.state ? G.SaveSlots.list() : [];
     const returning = !G.state && (resume.status === 'ready' || resume.status === 'invalid' || slots.some(slot => !slot.empty && slot.status !== 'unavailable'));
     const entry = ui.entry || (returning ? 'continue' : 'new');
     app.classList.toggle('at-start', !G.state && entry === 'new');
     app.classList.toggle('at-entry', !G.state && entry === 'continue');
-    if (renderedState !== G.state) { previousHUD = null; renderedState = G.state; }
+    if (renderedState !== G.state) { previousHUD = null; ui.buyerId = null; renderedState = G.state; }
     const currentHUD = G.Feedback.snapshot();
     if (!G.state) { app.innerHTML = (entry === 'continue' ? continueScreen(resume, slots) : startScreen(returning)) + currentModal(); G.Art.preload?.(resume.summary?.locationId); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(); return; }
     const body = { buy: buyTab, stock: stockTab, team: teamTab, store: storeTab, ledger: ledgerTab }[ui.tab]();
@@ -494,6 +525,8 @@ var G = globalThis.G = globalThis.G || {};
     app.innerHTML = `${hud()}${tabs()}<main>${body}</main>
       <footer class="bar-bottom ${G.state.ap === 0 && !G.state.over ? 'ready-to-settle' : ''}"><button class="btn primary big" data-act="end-month" ${G.state.over || ui.settling ? 'disabled' : ''}>${ui.settling ? '结算中……' : '结束本月 · 进入月结'}</button></footer>
       ${currentModal()}`;
+    const newModal = app.querySelector('.modal');
+    if (modalScroll && newModal?.getAttribute('aria-label') === modalScroll.title) newModal.querySelector('.modal-body').scrollTop = modalScroll.top;
     window.scrollTo(0, scroll);
     G.Tutorial?.render();
     G.Feedback.prepare(); syncOverlay();
@@ -540,7 +573,9 @@ var G = globalThis.G = globalThis.G || {};
     tab(el) { if (ui.tab === el.dataset.tab) { toast('就在这页，接着忙吧'); return; } ui.tab = el.dataset.tab; window.scrollTo(0, 0); render(); },
     visit(el) { run(G.act.visit(el.dataset.ch), true); },
     'inspect-visit'() { run(G.act.inspectVisit()); },
-    buy(el) { const res = G.act.buyOffer(+el.dataset.i); if (res.ok) { G.Sound.play('deal'); G.Feedback.vibrate('deal'); } run(res); },
+    buy(el) { const res = G.act.buyOffer(G.state.visit.offers.findIndex(o => o.car.id === +el.dataset.id)); if (res.ok) { G.Sound.play('deal'); G.Feedback.vibrate('deal'); } run(res); },
+    reject(el) { run(G.act.rejectOffer(G.state.visit.offers.findIndex(o => o.car.id === +el.dataset.id))); },
+    bargain(el) { run(G.act.bargainOffer(G.state.visit.offers.findIndex(o => o.car.id === +el.dataset.id), el.dataset.tactic)); },
     'visit-close'() { run(G.act.closeVisit(), true); },
     'pledge-visit'() { run(G.act.pledgeVisit(), true); },
     'pledge-check'(el) { run(G.act.pledgeCheck(+el.dataset.id)); },
@@ -550,6 +585,12 @@ var G = globalThis.G = globalThis.G || {};
     repay(el) { run(G.act.repay(+el.dataset.id)); },
     svc(el) { run(G.act.service(+el.dataset.car, el.dataset.svc)); },
     suggest(el) { run(G.act.suggestPrice(+el.dataset.car), true); },
+    'reduce-price'(el) { run(G.act.reducePrice(+el.dataset.car)); },
+    'buyer-meet'(el) { const res = G.act.meetBuyer(+el.dataset.car); if (res.ok) ui.buyerId = +el.dataset.car; run(res, true); },
+    'buyer-close'() { ui.buyerId = null; render(); },
+    'buyer-counter'(el) { run(G.act.counterBuyer(+el.dataset.car, el.dataset.tactic), true); },
+    'buyer-dismiss'(el) { run(G.act.dismissBuyer(+el.dataset.car)); },
+    'buyer-accept'(el) { const res = G.act.acceptBuyer(+el.dataset.car); if (res.ok) { ui.buyerId = null; G.Sound.play('deal'); G.Feedback.vibrate('deal'); } run(res); },
     peer(el) { const res = G.act.sellToPeer(+el.dataset.car); if (res.ok) { G.Sound.play('deal'); G.Feedback.vibrate('deal'); } run(res); },
     advertise() { run(G.act.advertise()); },
     'report-reg'() { run(G.act.reportReg()); },

@@ -8,6 +8,17 @@ var G = globalThis.G = globalThis.G || {};
   const ok = msg => ({ ok: true, msg });
   const fail = msg => ({ ok: false, msg });
   const S = () => G.state;
+  const owns = (table, key) => typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key);
+  function rememberTrade(n, ask, quote, text) {
+    n.history = n.history || [];
+    n.history.push({ round: n.rounds, ask, quote, text });
+    if (n.history.length > 8) n.history.shift();
+  }
+  function tradeLine(side, n, kind, price) {
+    let line = G.TRADE.styles[n.style][side][kind];
+    if (Array.isArray(line)) line = line[Math.max(0, n.rounds - 1) % line.length];
+    return line.replace(/\{price\}/g, G.fmtTrade(price));
+  }
 
   /* ---------- 基础 ---------- */
   G.log = function (text, type = 'info') {
@@ -33,7 +44,7 @@ var G = globalThis.G = globalThis.G || {};
   };
   G.suggestPrice = car => G.round(G.Car.value(car, 'public') * G.CONFIG.listMarkup);
   /** 开着"自动定价"的车，挂牌价跟着估值走（行情变动、整备、验出问题后都会更新） */
-  G.refreshAutoPrices = () => { for (const c of S().cars) if (c.autoPrice !== false) c.price = G.suggestPrice(c); };
+  G.refreshAutoPrices = () => { for (const c of S().cars) { if (c.autoPrice !== false) c.price = G.suggestPrice(c); G.refreshBuyer?.(c); } };
   G.peerPrice = car => G.round(G.Car.value(car, 'owner') * G.CONFIG.peerSellRate);
   G.inspectChance = () => {
     const s = S();
@@ -162,14 +173,15 @@ var G = globalThis.G = globalThis.G || {};
     return s;
   };
   G.parseSave = text => {
-    if (typeof text !== 'string' || text.length > G.CONFIG.maxSaveChars) throw new Error('这份存档没读出来，检查一下是不是贴错了。');
+    if (typeof text !== 'string' || text.length > G.CONFIG.maxSaveChars) throw new Error('这份存档没读出来，检查一下是不是选错了文件。');
     let s;
-    try { s = JSON.parse(text); } catch (_) { throw new Error('这串存档好像不完整，复制的时候是不是漏了一截？'); }
+    try { s = JSON.parse(text); } catch (_) { throw new Error('这份存档不完整或格式不正确，请重新选择备份文件。'); }
     const keyOf = (table, key) => typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key);
     const object = x => x && typeof x === 'object' && !Array.isArray(x);
     const number = (x, min = -Infinity, max = Infinity) => Number.isFinite(x) && x >= min && x <= max;
     const integer = (x, min = 0, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(x) && x >= min && x <= max;
     const need = (condition, message) => { if (!condition) throw new Error(`这份存档暂时读不了：${message}`); };
+    const tradeHistory = h => need(h === undefined || (Array.isArray(h) && h.length <= 8 && h.every(x => object(x) && integer(x.round, 0, G.TRADE.rounds) && (x.ask === null || number(x.ask, 0)) && number(x.quote, 0) && typeof x.text === 'string')), '议价记录损坏');
     need(object(s) && s.version === 1, '版本不支持');
     const walk = x => {
       if (typeof x === 'number') need(Number.isFinite(x), '有些账目对不上');
@@ -193,6 +205,15 @@ var G = globalThis.G = globalThis.G || {};
       need(keyOf(G.WARRANTY, c.warranty) && keyOf(G.BUYER_FINANCE, c.finance || 'none') && Array.isArray(c.flaws), '车辆方案或车况损坏');
       need(c.color === undefined || integer(c.color, 0, G.PAINTS ? G.PAINTS.length - 1 : 8), '车漆无效');
       c.flaws.forEach(f => need(object(f) && keyOf(G.FLAWS, f.id) && ['known','concealed','fixed'].every(k => typeof f[k] === 'boolean'), '车辆瑕疵无效'));
+      if (c.buyer !== undefined) {
+        const b = c.buyer;
+        need(object(b) && integer(b.month, 1, s.month) && integer(b.style, 0, G.TRADE.styles.length - 1) && integer(b.rounds, 0, G.TRADE.rounds) && integer(b.patience, 0, 4)
+          && ['talking','agreed','final','left'].includes(b.status) && typeof b.message === 'string'
+          && ['anchor','quote','budget'].every(k => number(b[k], 100)) && b.quote <= b.budget && b.budget <= b.anchor, '买家议价记录损坏');
+        tradeHistory(b.history);
+        need(b.willingness === undefined || number(b.willingness, 0, 10), '买家估价损坏');
+        if (b.terms !== undefined) need(object(b.terms) && number(b.terms.value, 1) && number(b.terms.price, 0) && keyOf(G.WARRANTY,b.terms.warranty) && keyOf(G.BUYER_FINANCE,b.terms.finance), '洽谈方案损坏');
+      }
     };
     s.cars.forEach(car);
     need(new Set(s.cars.map(c => c.id)).size === s.cars.length, '库存车辆编号重复');
@@ -213,8 +234,21 @@ var G = globalThis.G = globalThis.G || {};
     need(s.over === null || ['win','sealed','bankrupt','foreclosed'].includes(s.over), '结局无效');
     need(number(s.credit, 0, 100) && number(s.storeValue, 0), '征信或抵押物损坏');
     need(['revenue','cogs','opex'].every(k => number(s.month_[k], 0)) && object(s.month_.opexBy), '月度账本损坏');
+    if (s.month_.negotiatedSales !== undefined) need(Array.isArray(s.month_.negotiatedSales) && s.month_.negotiatedSales.every(x => object(x) && typeof x.name === 'string' && typeof x.warranty === 'string' && number(x.price, 0) && number(x.profit)), '议价成交台账损坏');
     need(Object.values(s.stats).every(v => number(v, 0)), '经营统计损坏');
-    if (s.visit !== null && s.visit !== undefined) { need(object(s.visit) && keyOf(G.CHANNELS, s.visit.chId) && Array.isArray(s.visit.offers), '看车现场损坏'); s.visit.offers.forEach(o => { car(o.car); need(number(o.factor, 0), '车辆报价损坏'); }); }
+    if (s.visit !== null && s.visit !== undefined) {
+      need(object(s.visit) && keyOf(G.CHANNELS, s.visit.chId) && Array.isArray(s.visit.offers), '看车现场损坏');
+      need(s.visit.message === undefined || typeof s.visit.message === 'string', '看车反馈损坏');
+      s.visit.offers.forEach(o => {
+        car(o.car); need(number(o.factor, 0), '车辆报价损坏');
+        if (o.negotiation !== undefined) {
+          const n = o.negotiation;
+          need(object(n) && integer(n.style, 0, G.TRADE.styles.length - 1) && integer(n.rounds, 0, G.TRADE.rounds) && integer(n.patience, 0, 4)
+            && number(n.floor, 0.8, 1) && number(n.discount, 0, 1 - n.floor + 0.00001) && typeof n.message === 'string', '卖家议价记录损坏');
+          tradeHistory(n.history);
+        }
+      });
+    }
     if (s.pledgeVisit) { need(Array.isArray(s.pledgeVisit.clients), '抵押接待损坏'); s.pledgeVisit.clients.forEach(pledge); }
     for (const h of s.history) need(object(h) && ['month','revenue','cogs','opex','profit','cash','net','dark','rep'].every(k => number(h[k])), '历史账本损坏');
     for (const l of s.log) need(object(l) && typeof l.text === 'string' && integer(l.m, 1) && ['info','good','bad','dark','warn','event'].includes(l.type), '日志损坏');
@@ -239,7 +273,7 @@ var G = globalThis.G = globalThis.G || {};
       if (hasLS()) localStorage.setItem(G.SAVE_KEY, JSON.stringify(candidate));
       G.state = candidate;
       return ok('存档读进来了，接着开张。');
-    } catch (e) { return fail(e.name === 'QuotaExceededError' || e.name === 'SecurityError' ? '浏览器不允许写入存档，当前局未改变，请先导出备份' : /存档|JSON/.test(e.message) ? e.message : '这份存档暂时读不了：内容没复制完整，原来这局还在。'); }
+    } catch (e) { return fail(e.name === 'QuotaExceededError' || e.name === 'SecurityError' ? '浏览器不允许写入存档，当前局未改变，请先导出备份' : /存档|JSON/.test(e.message) ? e.message : '这份存档暂时读不了：文件内容不完整，原来这局还在。'); }
   };
   G.clearSave = () => { try { if (hasLS()) localStorage.removeItem(G.SAVE_KEY); } catch (_) {} };
 
@@ -260,7 +294,53 @@ var G = globalThis.G = globalThis.G || {};
   // 卖家报价：按买家视角估值打折。验车揭开问题后，报价会随之下降
   // 门店越大，送上门的车源越多
   G.offerCount = chId => G.CHANNELS[chId].offers + Math.ceil(G.CHANNELS[chId].offers * G.CONFIG.offersPerLevel * (S().store.level - 1));
-  G.offerPrice = o => G.round(G.Car.value(o.car, 'public') * o.factor);
+  G.offerBasePrice = o => G.round(G.Car.value(o.car, 'public') * o.factor);
+  G.offerPrice = o => o.negotiation ? Math.max(100, G.round(G.offerBasePrice(o) * (1 - o.negotiation.discount), 100)) : G.offerBasePrice(o);
+
+  G.act.rejectOffer = function (i) {
+    const s = S(), o = s.visit?.offers[i];
+    if (!o) return fail('车辆不存在');
+    const e = guard(0, 0); if (e) return fail(e);
+    s.visit.offers.splice(i, 1);
+    s.visit.message = `已拒绝「${o.car.name}」，本批不再显示。`;
+    return ok(s.visit.message);
+  };
+
+  G.act.bargainOffer = function (i, tactic) {
+    const s = S(), o = s.visit?.offers[i];
+    if (!o || !owns(G.TRADE.cuts, tactic)) return fail('这台车暂时谈不了');
+    const cut = G.TRADE.cuts[tactic];
+    if (G.CHANNELS[s.visit.chId].blind) return fail('拍卖平台按报价成交，不能私下议价');
+    const e = guard(0, 0); if (e) return fail(e);
+    if (o.negotiation?.rounds >= G.TRADE.rounds) return fail('已经谈到最后一轮，可以按现价买下或拒绝');
+    if (!o.negotiation) {
+      const style = G.randInt(0, G.TRADE.styles.length - 1), d = G.TRADE.styles[style];
+      const floor = G.chance(G.TRADE.firmQuoteRate[s.visit.chId] || 0) ? 1 : G.range(...d.floor);
+      o.negotiation = { style, floor, discount: 0, rounds: 0, patience: d.patience, message: '' };
+    }
+    const n = o.negotiation, d = G.TRADE.styles[n.style], before = G.offerPrice(o), base = G.offerBasePrice(o);
+    const ask = Math.max(100, G.round(before * (1 - cut.rate), 100)), floor = Math.max(100, Math.ceil(base * n.floor / 100) * 100);
+    n.rounds++;
+    if (ask >= floor) {
+      n.discount = Math.min(1 - n.floor, Math.max(n.discount, 1 - ask / Math.max(100, base)));
+      n.message = `你出 ${G.fmtTrade(ask)}。卖家：“${tradeLine('seller',n,'accept',G.offerPrice(o))}”`;
+    } else {
+      n.patience = Math.max(0, n.patience - (tactic === 'hard' ? 2 : 1));
+      if (!n.patience) {
+        s.visit.offers.splice(i, 1);
+        s.visit.message = `「${o.car.name}」谈崩了。卖家：“${tradeLine('seller',n,'leave',before)}”车辆已离场。`;
+        G.log(s.visit.message, 'warn');
+        return ok(s.visit.message);
+      }
+      const counter = Math.max(floor, Math.min(before, G.round(before - (before - ask) * d.concede, 100)));
+      n.discount = Math.min(1 - n.floor, Math.max(n.discount, 1 - counter / Math.max(100, base)));
+      n.message = `你出 ${G.fmtTrade(ask)}。卖家：“${tradeLine('seller',n,G.offerPrice(o) < before ? 'counter' : 'firm',G.offerPrice(o))}”`;
+    }
+    if (n.rounds === G.TRADE.rounds) n.message += ' 这是最后报价。';
+    rememberTrade(n, ask, G.offerPrice(o), n.message);
+    s.visit.message = '';
+    return ok(n.message);
+  };
 
   // 现场验车：花 1 点，把本次看的车全部验一遍
   G.visitInspectCost = () => { const v = S().visit; return v ? v.offers.filter(o => !o.car.inspected).length * G.CONFIG.offerInspectCost : 0; };
@@ -369,21 +449,38 @@ var G = globalThis.G = globalThis.G || {};
   G.act.setPrice = function (carId, price) {
     const car = S().cars.find(c => c.id === carId);
     if (!car) return fail('车辆不存在');
+    if (!Number.isFinite(price) || price < 0) return fail('请输入有效的挂牌价');
+    const e = guard(0,0); if (e) return fail(e);
     car.price = Math.max(0, Math.round(price || 0));
     car.autoPrice = false;
+    G.refreshBuyer(car);
     return ok();
   };
   G.act.suggestPrice = function (carId) {
     const car = S().cars.find(c => c.id === carId);
     if (!car) return fail('车辆不存在');
+    const e = guard(0,0); if (e) return fail(e);
     car.autoPrice = true;
     car.price = G.suggestPrice(car);
+    G.refreshBuyer(car);
     return ok('已恢复自动定价');
+  };
+  G.act.reducePrice = function (carId) {
+    const car = S().cars.find(c => c.id === carId);
+    if (!car) return fail('车辆不存在');
+    const e = guard(0, 0); if (e) return fail(e);
+    if (car.price <= 100) return fail('挂牌价已经很低了');
+    car.price = Math.max(100, Math.min(car.price - 100, G.round(car.price * 0.97, 100)));
+    car.autoPrice = false;
+    G.refreshBuyer(car);
+    return ok(`已降价挂牌为 ${G.fmtTrade(car.price)}，之后可手动改价或恢复自动定价`);
   };
   G.act.setWarranty = function (carId, w) {
     const car = S().cars.find(c => c.id === carId);
-    if (!car || !G.WARRANTY[w]) return fail('这项办不了，换个试试。');
+    if (!car || !owns(G.WARRANTY,w)) return fail('这项办不了，换个试试。');
+    const e = guard(0,0); if (e) return fail(e);
     car.warranty = w;
+    G.refreshBuyer(car);
     return ok();
   };
 
@@ -642,6 +739,119 @@ var G = globalThis.G = globalThis.G || {};
   /** 事件里直接成交一台车（会正常产生质保和隐患） */
   G.sellRetail = (car, price) => sellRetail(car, null, price);
 
+  const buyerTerms = car => ({ value: Math.max(1,G.Car.value(car,'public')), price: car.price, warranty: car.warranty, finance: car.finance || 'none' });
+  // 条件改变只重估同一位买家，不重抽预算偏好、不恢复耐心或轮次。
+  G.refreshBuyer = function (car) {
+    const b = car.buyer;
+    if (!b || b.month !== S().month || b.status === 'left') return false;
+    const terms = buyerTerms(car), bonus = t => G.WARRANTY[t.warranty].bonus + G.BUYER_FINANCE[t.finance].bonus;
+    if (!b.terms || b.willingness === undefined) {
+      b.terms = terms;
+      b.willingness = Math.max(0,b.budget / terms.value - bonus(terms));
+      return false; // 兼容上一版已谈到一半的报价。
+    }
+    const previous = b.terms;
+    if (Object.keys(terms).every(k => terms[k] === previous[k])) return false;
+    b.terms = terms;
+    if (terms.price < 100) {
+      b.status = 'left'; b.message = '车辆已撤下挂牌，本次洽谈结束；下月可再主动接待。';
+      rememberTrade(b,null,b.quote,b.message); return true;
+    }
+    const material = terms.value !== previous.value || terms.warranty !== previous.warranty || terms.finance !== previous.finance;
+    b.anchor = Math.min(b.anchor,terms.price); // 不能临时抬高挂牌，诱使原买家加预算。
+    const budget = Math.max(100,Math.min(b.anchor,G.round(terms.value * (b.willingness + bonus(terms)),100)));
+    b.quote = Math.max(100,Math.min(b.quote,budget,G.round(b.quote * budget / b.budget,100)));
+    b.budget = budget;
+    if (material && b.status === 'agreed') b.status = b.rounds < G.TRADE.rounds ? 'talking' : 'final';
+    b.message = `${material ? '车况或质保、金融方案有变，买家按新条件重新核价' : '挂牌已调整，本次洽谈不会随抬价增加预算'}：“现在出 ${G.fmtTrade(b.quote)}。”轮次和耐心保持不变。`;
+    rememberTrade(b,null,b.quote,b.message);
+    return true;
+  };
+
+  // 主动零售：每台车每月只接待一位买家，暂离、刷新和改挂牌价都不重抽预算。
+  G.act.meetBuyer = function (carId) {
+    const s = S(), car = s.cars.find(c => c.id === carId);
+    if (!car) return fail('车辆不存在');
+    const existing = car.buyer?.month === s.month;
+    const e = guard(existing ? 0 : G.TRADE.buyerAP, 0); if (e) return fail(e);
+    if (existing) { G.refreshBuyer(car); return ok(); }
+    if (car.price < 100) return fail('先给这台车设一个至少100元的挂牌价');
+    pay(G.TRADE.buyerAP, 0, '接待');
+    const style = G.randInt(0, G.TRADE.styles.length - 1), d = G.TRADE.styles[style];
+    const shrewd = G.rand(), found = [];
+    let caught = false;
+    for (const f of car.flaws) {
+      if (f.fixed || G.Car.seen(f, 'public') || !G.chance(shrewd * G.CUSTOMER.detect * (f.concealed ? G.CUSTOMER.concealDetectMult : 1))) continue;
+      if (f.concealed) caught = true;
+      else if (!f.known) { f.known = true; found.push(G.FLAWS[f.id].name); }
+    }
+    if (found.length) G.refreshAutoPrices();
+    const anchor = Math.max(100, car.price), terms = buyerTerms(car);
+    const willingness = G.range(...G.CUSTOMER.willing) - s.dark * G.CUSTOMER.darkPenalty;
+    const will = terms.value * (willingness + G.WARRANTY[car.warranty].bonus + G.Finance.willBonus(car));
+    const budget = Math.max(100, Math.min(anchor, G.round(will, 100)));
+    const quote = Math.max(100, Math.min(budget, G.round(Math.min(anchor * G.range(0.86, 0.94), budget * 0.95), 100)));
+    car.buyer = { month: s.month, style, anchor, quote, budget, willingness, terms, rounds: 0, patience: d.patience, status: caught ? 'left' : 'talking', message: '', history: [] };
+    car.buyer.message = caught ? '买家验出了被掩盖的问题：“这车况你可没说，算了！”买家已离开。'
+      : `${found.length ? `买家验出${found.join('、')}，按已知车况重新估价。` : ''}买家：“${tradeLine('buyer',car.buyer,'open',quote)}”`;
+    rememberTrade(car.buyer,null,quote,car.buyer.message);
+    if (caught && !car.caught) { car.caught = true; G.addRep(-G.CONFIG.caughtRep); }
+    if (caught) G.log(`「${car.name}」${car.buyer.message}`, 'warn');
+    return ok();
+  };
+
+  G.buyerCounterPrice = (b, tactic) => Math.max(b.quote, Math.min(b.anchor, G.round(b.quote + (b.anchor - b.quote) * G.TRADE.counters[tactic].share, 100)));
+  G.act.counterBuyer = function (carId, tactic) {
+    const car = S().cars.find(c => c.id === carId), b = car?.buyer;
+    if (!b || b.month !== S().month || !owns(G.TRADE.counters, tactic)) return fail('当前没有这位买家');
+    const e = guard(0, 0); if (e) return fail(e);
+    if (G.refreshBuyer(car)) return fail('交易条件已变化，请看清新报价后再还价');
+    if (b.status !== 'talking' || b.rounds >= G.TRADE.rounds) return fail('不能再还价了，可按买家报价成交或送客');
+    const ask = G.buyerCounterPrice(b, tactic), d = G.TRADE.styles[b.style];
+    b.rounds++;
+    // 有预算也未必第一句就全掏出来；越往后，买家越愿意亮出能接受的价格。
+    const readiness = Math.min(1,d.buyerConcede + 0.18 * (b.rounds - 1));
+    const readyPrice = Math.min(b.budget,G.round(b.quote + (b.budget-b.quote) * readiness,100));
+    if (ask <= b.budget && (ask <= readyPrice || b.rounds === G.TRADE.rounds)) {
+      b.quote = ask; b.status = 'agreed';
+      b.message = `你还价 ${G.fmtTrade(ask)}。买家：“${tradeLine('buyer',b,'accept',ask)}”`;
+    } else {
+      b.patience = Math.max(0, b.patience - (tactic === 'hard' && ask > b.budget ? 2 : 1));
+      if (!b.patience) {
+        b.status = 'left';
+        b.message = `你还价 ${G.fmtTrade(ask)}。买家：“${tradeLine('buyer',b,'leave',b.quote)}”本月这位买家已离开。`;
+        G.log(`「${car.name}」${b.message}`, 'warn');
+      } else {
+        const before = b.quote;
+        b.quote = Math.max(before,Math.min(b.budget,ask,G.round(before + (Math.min(ask,b.budget) - before) * readiness,100)));
+        b.status = b.rounds >= G.TRADE.rounds ? 'final' : 'talking';
+        b.message = `你还价 ${G.fmtTrade(ask)}。买家：“${tradeLine('buyer',b,b.quote > before ? 'counter' : 'firm',b.quote)}”${b.status === 'final' ? ' 这是买家的最后报价。' : ''}`;
+      }
+    }
+    rememberTrade(b,ask,b.quote,b.message);
+    return ok(b.message);
+  };
+
+  G.act.acceptBuyer = function (carId) {
+    const car = S().cars.find(c => c.id === carId), b = car?.buyer;
+    if (!b || b.month !== S().month || b.status === 'left') return fail('买家已经离开');
+    const e = guard(0, 0); if (e) return fail(e);
+    if (G.refreshBuyer(car)) return fail('交易条件已变化，请确认买家的新报价再成交');
+    b.status = 'left';
+    sellRetail(car, null, b.quote);
+    S().month_.negotiatedSales = S().month_.negotiatedSales || [];
+    S().month_.negotiatedSales.push({ name: car.name, price: b.quote, profit: b.quote - car.cost, warranty: G.WARRANTY[car.warranty].months ? G.WARRANTY[car.warranty].name : '' });
+    checkEnd();
+    return ok(`「${car.name}」议价成交 ${G.fmtTrade(b.quote)}，毛利 ${G.fmtTrade(b.quote - car.cost)}`);
+  };
+  G.act.dismissBuyer = function (carId) {
+    const b = S().cars.find(c => c.id === carId)?.buyer;
+    if (!b || b.month !== S().month) return fail('当前没有这位买家');
+    const e = guard(0, 0); if (e) return fail(e);
+    b.status = 'left'; b.message = '你婉拒了这位买家。本月仍可等待其他客户在月底进店。';
+    return ok('已送客，车辆继续挂牌');
+  };
+
   /** 事件里把一台车加入库存 */
   G.addCar = function (car, cost, source) {
     const s = S();
@@ -815,7 +1025,7 @@ var G = globalThis.G = globalThis.G || {};
     if (G.cleanPending()) return fail('请先处理待办事件');
     s.visit = null; s.pledgeVisit = null;
     const beforeNet = G.netWorth(), beforeDark = s.dark;
-    const r = { month: s.month, date: G.dateLabel(), sales: [], lines: [], customers: 0 };
+    const r = { month: s.month, date: G.dateLabel(), sales: [...(s.month_.negotiatedSales || [])], lines: [], customers: 0 };
 
     G.refreshAutoPrices();
     runSales(r);

@@ -209,8 +209,10 @@ var G = globalThis.G = globalThis.G || {};
 
   G.act.setFinance = function (carId, f) {
     const car = S().cars.find(c => c.id === carId);
-    if (!car || !G.BUYER_FINANCE[f]) return fail('这项办不了，换个试试。');
+    if (!car || !Object.prototype.hasOwnProperty.call(G.BUYER_FINANCE,f)) return fail('这项办不了，换个试试。');
+    const e = G.guard(0,0); if (e) return fail(e);
     car.finance = f;
+    G.refreshBuyer(car);
     return ok();
   };
 

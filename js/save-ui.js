@@ -7,7 +7,7 @@ var G = globalThis.G = globalThis.G || {};
  const shell=(title,body,foot='',cls='')=>`<div class="overlay"><section class="modal ${cls}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="modal-heading"><h3>${esc(title)}</h3><button class="btn sm icon-button" data-act="menu-close" aria-label="关闭菜单">×</button></div><div class="modal-body">${body}</div>${foot?`<div class="modal-foot">${foot}</div>`:''}</section></div>`;
  const showResult=result=>{draw();toast(result.msg,!result.ok);};
  const cancelFileRead=()=>{ui().fileReadToken=(ui().fileReadToken||0)+1;};
- const reset=()=>Object.assign(ui(),{menu:false,saveDialog:null,confirm:null,help:false,report:null,result:null,tab:'store',stockPage:1,importText:'',saveError:''});
+ const reset=()=>Object.assign(ui(),{menu:false,saveDialog:null,confirm:null,help:false,report:null,result:null,tab:'store',stockPage:1,importData:'',importFileName:'',fileReading:false,saveError:''});
  const slotInfo=slot=>slot.summary?`第 ${slot.summary.month} 月 · ${esc(slot.summary.location)} · ${esc(slot.summary.store)}<br>净资产 ${G.fmt(slot.summary.net)} · 黑化 ${slot.summary.dark} · 口碑 ${slot.summary.rep}`:esc(slot.msg||'还没有保存进度');
  const S=G.SaveUI={
   menu(){
@@ -20,8 +20,9 @@ var G = globalThis.G = globalThis.G || {};
   editor(){
    const exporting=ui().saveDialog==='export';
    const target=exporting?'':`<label for="save-slot">导入到哪个档位</label><select id="save-slot" class="save-target">${G.SaveSlots.list().map(slot=>`<option value="${slot.id}" ${slot.id===ui().importSlot?'selected':''}>档位 ${slot.id} · ${slot.empty?'空档位':slot.summary?'第 '+slot.summary.month+' 月':'已有内容'}</option>`).join('')}</select>`;
-   const body=`<p>${exporting?'复制存档码或下载文件，换台手机也能接着忙。':'粘贴存档码，或选择导出的文件。先存入所选档位，再点击「读取」继续；当前游戏不会被替换。'}</p>${target}<label for="save-text">存档码</label><textarea id="save-text" class="save-text" spellcheck="false" ${exporting?'readonly':''}>${esc(exporting?ui().exportText:ui().importText||'')}</textarea>${exporting?'':`<label class="btn save-file-label" for="save-file">选择存档文件<input id="save-file" type="file" accept=".txt,.json,application/json,text/plain"></label>`}<p id="save-error" class="neg" role="alert">${esc(ui().saveError||'')}</p>`;
-   return shell(exporting?(ui().exportSlot?'导出档位 '+ui().exportSlot:'导出当前进度'):'导入存档',body,`${exporting?'<button class="btn primary" data-act="save-copy">复制存档码</button><button class="btn" data-act="save-download">下载存档文件</button>':'<button class="btn primary" data-act="save-apply">导入到所选档位</button>'}<button class="btn" data-act="save-close">返回存档页</button>`,'save-dialog');
+   const details=exporting?`<p class="save-file-info">${ui().exportSlot?'档位 '+ui().exportSlot:'当前进度'}${ui().exportMonth?' · 第 '+ui().exportMonth+' 月':''}</p>`:`<label class="btn save-file-label" for="save-file">选择存档文件<input id="save-file" type="file" accept=".txt,.json,application/json,text/plain"></label><p id="save-file-status" class="save-file-info" role="status">${ui().fileReading?'正在读取：'+esc(ui().importFileName):ui().importFileName?'已选择：'+esc(ui().importFileName):'尚未选择文件'}</p>`;
+   const body=`<p>${exporting?(ui().exportInvalid?'这份内容异常，可下载原始备份留作恢复。':'下载 JSON 存档文件，换台手机也能接着忙。'):'选择导出的 .json 存档文件（也兼容旧版 .txt）。先存入所选档位，再点击「读取」继续；当前游戏不会被替换。'}</p>${target}${details}<p id="save-error" class="neg" role="alert">${esc(ui().saveError||'')}</p>`;
+   return shell(exporting?(ui().exportSlot?'导出档位 '+ui().exportSlot:'导出当前进度'):'导入存档',body,`${exporting?`<button class="btn primary" data-act="save-download">${ui().exportInvalid?'下载原始备份（.txt）':'下载 JSON 存档（.json）'}</button>`:`<button class="btn primary" data-act="save-apply" ${ui().fileReading||!ui().importData?'disabled':''}>导入到所选档位</button>`}<button class="btn" data-act="save-close">返回存档页</button>`,'save-dialog');
   },
   confirm(){
    const kind=ui().confirm,id=ui().targetSlot;
@@ -50,13 +51,13 @@ var G = globalThis.G = globalThis.G || {};
     }
     let result;
     if(kind==='slot-save')result=G.SaveSlots.save(id,expected);
-    else if(kind==='slot-import')result=G.SaveSlots.import(id,ui().importText||'',expected);
+    else if(kind==='slot-import')result=G.SaveSlots.import(id,ui().importData||'',expected);
     else if(kind==='slot-load')result=G.SaveSlots.load(id,expected);
     else return;
     ui().confirm=null;
     if(!result.ok){ui().saveError=result.msg;showResult(result);return;}
     if(kind==='slot-load'){G.Tutorial?.stop(false);reset();draw();window.scrollTo(0,0);toast(result.msg);return;}
-    if(kind==='slot-import')Object.assign(ui(),{menu:true,saveDialog:null,importText:'',saveError:''});
+    if(kind==='slot-import')Object.assign(ui(),{menu:true,saveDialog:null,importData:'',importFileName:'',fileReading:false,saveError:''});
     showResult(result);
    },
    'slot-save'(el){
@@ -71,30 +72,26 @@ var G = globalThis.G = globalThis.G || {};
    },
    'slot-export'(el){
     const result=G.SaveSlots.export(+el.dataset.slot);if(!result.ok){toast(result.msg,true);return;}
-    Object.assign(ui(),{saveDialog:'export',saveError:result.invalid?'这份档位内容异常，导出的原文件可以留作恢复。':'',exportText:result.text,exportSlot:+el.dataset.slot,exportMonth:result.month});draw();
+    Object.assign(ui(),{saveDialog:'export',saveError:result.invalid?'这份档位内容异常，导出的原文件可以留作恢复。':'',exportInvalid:result.invalid,exportText:result.text,exportSlot:+el.dataset.slot,exportMonth:result.month});draw();
    },
    'save-export'(){
-    if(!G.state)return;Object.assign(ui(),{saveDialog:'export',saveError:'',exportText:JSON.stringify(G.state),exportSlot:null,exportMonth:G.state.month});draw();
+    if(!G.state)return;Object.assign(ui(),{saveDialog:'export',saveError:'',exportInvalid:false,exportText:JSON.stringify(G.state),exportSlot:null,exportMonth:G.state.month});draw();
    },
    'save-import'(){
     cancelFileRead();
     const empty=G.SaveSlots.list().find(slot=>slot.empty);
-    Object.assign(ui(),{saveError:'',saveDialog:'import',importText:'',importSlot:empty?.id||1});draw();
+    Object.assign(ui(),{saveError:'',saveDialog:'import',importData:'',importFileName:'',fileReading:false,importSlot:empty?.id||1});draw();
    },
    'save-close'(){cancelFileRead();ui().saveDialog=null;ui().saveError='';ui().menu=true;draw();},
-   'save-copy'(){
-    const el=document.getElementById('save-text');if(!el)return;el.focus();el.select();toast('存档码选好了，正在复制……');
-    if(navigator.clipboard?.writeText)navigator.clipboard.writeText(el.value).then(()=>toast('复制好了，找个地方收好。')).catch(()=>toast('没能自动复制，长按选中的存档码手动复制吧。'));
-    else toast('长按选中的存档码，手动复制吧。');
-   },
    'save-download'(){
-    if(!ui().exportText)return;const blob=new Blob([ui().exportText],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download='瓜皮二手车-'+(ui().exportSlot?'档位'+ui().exportSlot:'当前进度')+(ui().exportMonth?'-第'+ui().exportMonth+'月':'')+'.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('存档文件备好了，收进下载里。');
+    if(!ui().exportText)return;const invalid=ui().exportInvalid,blob=new Blob([ui().exportText],{type:invalid?'text/plain;charset=utf-8':'application/json;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='瓜皮二手车-'+(ui().exportSlot?'档位'+ui().exportSlot:'当前进度')+(ui().exportMonth?'-第'+ui().exportMonth+'月':'')+(invalid?'.txt':'.json');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('存档文件备好了，收进下载里。');
    },
    'save-apply'(){
-    ui().importText=document.getElementById('save-text').value;ui().importSlot=+document.getElementById('save-slot').value;
+    if(ui().fileReading||!ui().importData){ui().saveError='请先选择并读取一份存档文件。';draw();return;}
+    ui().importSlot=+document.getElementById('save-slot').value;
     try{
-     G.parseSave(ui().importText);const slot=G.SaveSlots.get(ui().importSlot);if(!slot.ok)throw new Error(slot.msg);
+     G.parseSave(ui().importData);const slot=G.SaveSlots.get(ui().importSlot);if(!slot.ok)throw new Error(slot.msg);
      ui().targetSlot=slot.id;ui().slotExpected=slot.raw;ui().confirm='slot-import';ui().saveError='';draw();
     }catch(e){ui().saveError=e.message;document.getElementById('save-error').textContent=ui().saveError;toast(ui().saveError,true);}
    },
@@ -102,13 +99,14 @@ var G = globalThis.G = globalThis.G || {};
    'tutorial-replay'(){ui().menu=false;ui().help=false;G.Tutorial.start(true);},
   },
  };
- document.addEventListener('input',e=>{if(e.target.id==='save-text'&&ui().saveDialog==='import'){cancelFileRead();ui().importText=e.target.value;}});
  document.addEventListener('change',async e=>{
   if(e.target.id==='save-slot'){ui().importSlot=+e.target.value;return;}
   if(e.target.id!=='save-file')return;const file=e.target.files[0];if(!file)return;
-  if(file.size>G.CONFIG.maxSaveChars){ui().saveError='这份文件太大了，像是选错了。';draw();return;}
   // 用户离开导入页或重选文件后，迟到的读取结果不再覆盖当前输入。
   const token=ui().fileReadToken=(ui().fileReadToken||0)+1;
-  try{const text=await file.text();if(ui().saveDialog!=='import'||ui().fileReadToken!==token)return;ui().importText=text;ui().saveError='';draw();toast('文件读好了，选好档位后再确认导入。');}catch(_){if(ui().saveDialog==='import'&&ui().fileReadToken===token){ui().saveError='这份文件没读出来，重新选一次试试。';draw();}}
+  Object.assign(ui(),{importData:'',importFileName:file.name,fileReading:false,saveError:''});
+  if(file.size>G.CONFIG.maxSaveChars){ui().saveError='这份文件太大了，像是选错了。';draw();return;}
+  ui().fileReading=true;draw();
+  try{const text=await file.text();if(ui().saveDialog!=='import'||ui().fileReadToken!==token)return;ui().fileReading=false;if(!text.trim())throw new Error('empty');ui().importData=text;ui().saveError='';draw();toast('文件读好了，选好档位后再确认导入。');}catch(error){if(ui().saveDialog==='import'&&ui().fileReadToken===token){ui().fileReading=false;ui().saveError=error.message==='empty'?'这份文件是空的，请重新选择存档文件。':'这份文件没读出来，重新选一次试试。';draw();}}
  });
 })();

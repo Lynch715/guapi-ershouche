@@ -30,17 +30,17 @@ module.exports=async function(browser,url,out,check,result,prefix,online){
    check(all[0]===legacy&&JSON.parse(all[1]).month===2&&JSON.parse(all[2]).month===3,width+' 三个档位是独立快照');
    await p.locator('.save-menu .modal-body').evaluate(e=>e.scrollTop=0);await shot('filled');
    for(const id of [1,2,3]){
-    await slot(id,'export').click();check(await p.locator('#save-text').inputValue()===all[id-1],width+' 导出档位'+id+'而非当前局');
+    await slot(id,'export').click();check(await p.locator('#save-text,[data-act="save-copy"]').count()===0,width+' 档位导出只提供文件');
     const downloading=p.waitForEvent('download');await click('save-download');const d=await downloading;
-    check(fs.readFileSync(await d.path(),'utf8')===all[id-1]&&d.suggestedFilename().includes('档位'+id),width+' 档位'+id+'文件名及内容正确');await click('save-close');
+    check(fs.readFileSync(await d.path(),'utf8')===all[id-1]&&d.suggestedFilename().includes('档位'+id)&&d.suggestedFilename().endsWith('.json'),width+' 档位'+id+' JSON文件名及内容正确');await click('save-close');
    }
    await slot(1,'save').click();check((await p.locator('.confirm-dialog').innerText()).includes('覆盖档位 1'),width+' 覆盖显示目标档位');await click('confirm-no');
    check(await p.evaluate(()=>G.SaveSlots.export(1).text)===legacy,width+' 取消覆盖保留原档');
-   await click('save-import');await p.locator('#save-slot').selectOption('2');await p.locator('#save-text').fill('wrong-json');await click('save-apply');
+   await click('save-import');await p.locator('#save-slot').selectOption('2');check(await p.locator('[data-act="save-apply"]').isDisabled(),width+' 未选择文件时不可导入');await p.locator('#save-file').setInputFiles({name:'损坏.json',mimeType:'application/json',buffer:Buffer.from('wrong-json')});await p.waitForFunction(()=>!G.ui.fileReading&&G.ui.importData);await click('save-apply');
    check((await p.locator('#save-error').innerText()).includes('不完整'),width+' 损坏导入可解释');
    check(await p.evaluate(()=>G.SaveSlots.export(2).text)===all[1],width+' 损坏导入不改目标档位');
    await p.locator('#save-file').setInputFiles({name:'备份.json',mimeType:'application/json',buffer:Buffer.from(legacy)});
-   await p.waitForFunction(text=>document.getElementById('save-text').value===text,legacy);
+   await p.waitForFunction(text=>!G.ui.fileReading&&G.ui.importData===text,legacy);
    check(await p.locator('#save-slot').inputValue()==='2',width+' 选文件重绘后保留目标档位');await shot('import');
    await click('save-apply');await shot('confirm');await click('confirm-no');
    check(await p.evaluate(()=>G.SaveSlots.export(2).text)===all[1],width+' 取消导入保留原档');
