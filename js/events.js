@@ -32,7 +32,7 @@ var G = globalThis.G = globalThis.G || {};
   const moy = () => ((S().month - 1) % 12) + 1;               // 当前是几月（1~12）
   const lvl = () => S().store.level;
   const catName = k => G.CATEGORIES[k].name;
-  const staffOf = role => S().staff.filter(e => e.role === role);
+  const staffOf = role => G.Staff.active(role);
   const staffById = id => S().staff.find(e => e.id === id);
   // 某岗位里品行最差的人越差，出事的权重越高
   const shady = role => { const l = staffOf(role); return l.length ? 1 + 8 * (1 - Math.min(...l.map(e => e.integrity))) : 0; };
@@ -45,6 +45,8 @@ var G = globalThis.G = globalThis.G || {};
   // 品行变化：正数变坏，负数变好
   const worsen = (id, d) => { const e = staffById(id); if (e) e.integrity = +G.clamp(e.integrity - d, 0, 1).toFixed(2); };
   const hiddenUndisclosed = car => car.flaws.some(f => !f.fixed && !G.Car.seen(f, 'public'));
+  const quote = (car, discount = 1) => G.eventSalePrice(car,G.round(car.price * discount));
+  const totalQuote = (ids, discount) => ids.map(carOf).filter(Boolean).reduce((sum,car) => sum + quote(car,discount),0);
 
   // 选项条件
   const needCash = n => () => (S().cash < n ? `现金不足（需要 ${fmt(n)}）` : null);
@@ -159,10 +161,10 @@ var G = globalThis.G = globalThis.G || {};
       },
       text: c => `老客户带了两个朋友，看中了${c.ids.map(id => `「${carOf(id).name}」`).join('和')}，挂牌合计 ${fmt(c.total)}，希望打个九五折一起拿下。`,
       options: [
-        { label: '九五折一起卖', hint: c => `立即回款约 ${fmt(c.total * 0.95)} · 口碑 +2`,
+        { label: '九五折一起卖', hint: c => `按车况和预算报价，共 ${fmt(totalQuote(c.ids,0.95))} · 口碑 +2`,
           run: c => { c.ids.map(carOf).filter(Boolean).forEach(x => G.sellRetail(x, G.round(x.price * 0.95))); G.addRep(2); return '两台车一起成交，老客户很有面子。'; } },
-        { label: '坚持原价', hint: '一半可能只成交一台',
-          run: c => { const x = carOf(c.ids[0]); if (x && G.chance(0.5)) { G.sellRetail(x); return `朋友咬咬牙，按原价买了「${x.name}」。`; } return '他们觉得你不给面子，走了。'; } },
+        { label: '坚持原价', hint: '挂牌在买家预算内时，一半可能只成交一台',
+          run: c => { const x = carOf(c.ids[0]); if (x && G.chance(0.5) && quote(x) >= x.price) { G.sellRetail(x); return `朋友咬咬牙，按原价买了「${x.name}」。`; } return '报价超过预算或他们觉得不合适，这次没成交。'; } },
       ],
     },
     {
@@ -171,8 +173,8 @@ var G = globalThis.G = globalThis.G || {};
       setup: () => { const car = G.pick(listed()); return { id: car.id, price: car.price }; },
       text: c => `一位客户在「${carOf(c.id).name}」前转了三圈，说现金全款，但挂牌 ${fmt(c.price)} 必须让一成。`,
       options: [
-        { label: '让一成，成交', hint: c => `成交价 ${fmt(G.round(c.price * 0.9))}`,
-          run: c => { const x = carOf(c.id); if (x) G.sellRetail(x, G.round(c.price * 0.9)); return '客户满意地提车走了。'; } },
+        { label: '按买家报价成交', hint: c => `挂牌九折，且不超过车况与预算上限：${fmt(quote(carOf(c.id),0.9))}`,
+          run: c => { const x = carOf(c.id); const sale = x && G.sellRetail(x,quote(x,0.9)); return sale ? `客户按 ${fmt(sale.price)} 提车走了。` : '车辆已不在库存。'; } },
         { label: '一分不让' },
       ],
     },
@@ -184,24 +186,24 @@ var G = globalThis.G = globalThis.G || {};
         const t = offerCar('private', 1);
         return { targetId: target.id, car: t.car, value: t.price };
       },
-      text: c => `客户想买「${carOf(c.targetId).name}」（挂牌 ${fmt(carOf(c.targetId).price)}），拿自己的「${c.car.name}」（${c.car.year}年，表显 ${G.fmtKm(c.car.mileageShown)}）来置换。他的车你没验过，看着车况还行，市场价大约 ${fmt(c.value)}。`,
+      text: c => `客户想买「${carOf(c.targetId).name}」（挂牌 ${fmt(carOf(c.targetId).price)}，按车况与预算最多出 ${fmt(quote(carOf(c.targetId)))}），拿自己的「${c.car.name}」（${c.car.year}年，表显 ${G.fmtKm(c.car.mileageShown)}）来置换。他的车你没验过，看着车况还行，市场价大约 ${fmt(c.value)}。`,
       options: [
         { label: '收下置换车，压价到八五折', hint: c => `置换车作价 ${fmt(G.round(c.value * 0.85))}`,
           run: c => {
             const x = carOf(c.targetId); if (!x) return '客户要的车已经不在了。';
-            G.sellRetail(x); S().cash -= G.round(c.value * 0.85);
+            const sale = G.sellRetail(x); S().cash -= G.round(c.value * 0.85);
             G.addCar(c.car, G.round(c.value * 0.85), '置换收车');
-            return '置换成交。他的车有没有坑，验了才知道。';
+            return `本店车辆作价 ${fmt(sale.price)}，置换成交。他的车有没有坑，验了才知道。`;
           } },
         { label: '良心置换：按市场价作价', hint: c => `置换车作价 ${fmt(c.value)} · 口碑 +3`,
           run: c => {
             const x = carOf(c.targetId); if (!x) return '客户要的车已经不在了。';
-            G.sellRetail(x); S().cash -= c.value;
+            const sale = G.sellRetail(x); S().cash -= c.value;
             G.addCar(c.car, c.value, '置换收车'); G.addRep(3);
-            return '客户逢人就说你们家置换最公道。';
+            return `本店车辆作价 ${fmt(sale.price)}，客户逢人就说你们家置换最公道。`;
           } },
         { label: '只卖车，不收置换', hint: '一半可能客户直接走人',
-          run: c => { const x = carOf(c.targetId); if (x && G.chance(0.5)) { G.sellRetail(x); return '客户自己去卖旧车，还是在你这买了车。'; } return '客户嫌麻烦，去别家了。'; } },
+          run: c => { const x = carOf(c.targetId); if (x && G.chance(0.5)) { const sale=G.sellRetail(x); return `客户自己去卖旧车，按 ${fmt(sale.price)} 在你这买了车。`; } return '客户嫌麻烦，去别家了。'; } },
       ],
     },
     {
@@ -213,11 +215,11 @@ var G = globalThis.G = globalThis.G || {};
       },
       text: c => `一家网约车公司要一次性拿走 3 台车（挂牌合计 ${fmt(c.total)}），出价打九二折。他们有专业车队，交车后会逐台检测，有问题会集中投诉。`,
       options: [
-        { label: '接单', hint: c => `回款约 ${fmt(c.total * 0.92)} · 有没披露的问题会被追责`,
+        { label: '接单', hint: c => `按车况和预算报价，共 ${fmt(totalQuote(c.ids,0.92))} · 有没披露的问题会被追责`,
           run: c => {
             let bad = 0, refund = 0;
             for (const x of c.ids.map(carOf).filter(Boolean)) {
-              const p = G.round(x.price * 0.92);
+              const p = quote(x,0.92);
               const hidden = hiddenUndisclosed(x);
               G.sellRetail(x, p);
               if (hidden && G.chance(0.6)) { bad++; refund += G.round(p * 0.15); }
@@ -235,7 +237,7 @@ var G = globalThis.G = globalThis.G || {};
       setup: s => { const car = G.pick(s.cars.filter(c => G.CATEGORIES[c.catId].classic)); return { id: car.id, offer: G.round(G.Car.value(car, 'public') * 1.25) }; },
       text: c => `一位老藏家看上了「${carOf(c.id).name}」，开价 ${fmt(c.offer)}。情怀车还在慢慢升值，要不要现在出手？`,
       options: [
-        { label: '卖', hint: c => `成交 ${fmt(c.offer)}`, run: c => { const x = carOf(c.id); if (x) G.sellRetail(x, c.offer); return '藏家满意地把车拖走了。'; } },
+        { label: '卖', hint: c => `成交 ${fmt(G.eventSalePrice(carOf(c.id),c.offer,true))}`, run: c => { const x = carOf(c.id); if (x) G.sellRetail(x, c.offer,true); return '藏家满意地把车拖走了。'; } },
         { label: '再放放' },
       ],
     },
@@ -265,7 +267,7 @@ var G = globalThis.G = globalThis.G || {};
       id: 'peer_price_war', title: '同行低价抢客', tone: 'bad', weight: 4, cooldown: 6,
       text: '隔壁车行挂出一排「全城最低价」，把你的客户截走了不少。',
       options: [
-        { label: '跟着降价', hint: '所有挂牌价下调 5%', run: () => { listed().forEach(c => { c.price = G.round(c.price * 0.95); }); return '你也挂出了降价横幅，客流稳住了。'; } },
+        { label: '跟着降价', hint: '所有挂牌价下调 5%，停止自动定价，可在库存恢复', run: () => { listed().forEach(c => { c.price = G.round(c.price * 0.95); c.autoPrice = false; G.refreshBuyer(c); }); return '你也挂出了降价横幅。已停止自动定价，之后可在库存页恢复。'; } },
         { label: '找人私下「沟通」', effect: { cash: -20000, dark: 8 }, when: needCash(20000), result: '对方第二天就撤了横幅。没人知道那天晚上发生了什么。' },
         { label: '不理会', effect: { traffic: 0.6 } },
       ],
@@ -329,9 +331,9 @@ var G = globalThis.G = globalThis.G || {};
     },
     {
       id: 'staff_poached', title: '同行高薪挖人', tone: 'bad', weight: 3, cooldown: 6,
-      when: () => S().staff.some(e => e.level >= 2),
+      when: () => G.Staff.active().some(e => e.level >= 2),
       setup: () => {
-        const e = G.pick(S().staff.filter(x => x.level >= 2));
+        const e = G.pick(G.Staff.active().filter(x => x.level >= 2));
         return { staffId: e.id, name: e.name, role: G.ROLES[e.role].name, raise: G.round(e.salary * 0.3, 500) };
       },
       text: c => `隔壁车行开出高薪，要挖走你的${c.role}${c.name}。他来问你的意思。`,
@@ -342,9 +344,9 @@ var G = globalThis.G = globalThis.G || {};
     },
     {
       id: 'staff_promotion', title: '老员工要求升职加薪', tone: 'neutral', weight: 4, cooldown: 4,
-      when: () => S().staff.some(e => e.tenure >= 12 && e.level < 3),
+      when: () => G.Staff.active().some(e => e.tenure >= 12 && e.level < 3),
       setup: () => {
-        const e = G.pick(S().staff.filter(x => x.tenure >= 12 && x.level < 3));
+        const e = G.pick(G.Staff.active().filter(x => x.tenure >= 12 && x.level < 3));
         const next = G.round(G.ROLES[e.role].salary[e.level] * G.range(0.95, 1.1), 500);
         return { staffId: e.id, name: e.name, role: e.role, level: e.level, salary: next };
       },
@@ -379,10 +381,10 @@ var G = globalThis.G = globalThis.G || {};
       id: 'yinyang_contract', title: '客户要求阴阳合同', tone: 'bad', weight: 4, cooldown: 4,
       when: () => listed().length > 0,
       setup: () => { const car = G.pick(listed()); return { id: car.id, fee: G.round(car.price * 0.03, 100) }; },
-      text: c => `客户看中「${carOf(c.id).name}」，条件是合同上把价格写低，帮他少缴税，另外愿意额外给你 ${fmt(c.fee)} 辛苦费。`,
+      text: c => `客户看中「${carOf(c.id).name}」，按车况与预算出 ${fmt(quote(carOf(c.id)))}。条件是合同上把价格写低，帮他少缴税，另外愿意额外给你 ${fmt(G.round(quote(carOf(c.id))*0.03,100))} 辛苦费。`,
       options: [
-        { label: '签阴阳合同', hint: c => `成交 + 额外 ${fmt(c.fee)} · 黑化 +10 · 监管抽查会翻台账`,
-          run: c => { const x = carOf(c.id); if (!x) return '车已经不在了。'; const sale = G.sellRetail(x); sale.concealed = true; S().cash += c.fee; S().month_.revenue += c.fee; G.addDark(10); return '合同签了，钱也收了。这笔账，监管来查时说不清。'; } },
+        { label: '签阴阳合同', hint: c => `成交 + 额外 ${fmt(G.round(quote(carOf(c.id))*0.03,100))} · 黑化 +10 · 监管抽查会翻台账`,
+          run: c => { const x = carOf(c.id); if (!x) return '车已经不在了。'; const sale = G.sellRetail(x); const fee=G.round(sale.price*0.03,100); sale.concealed = true; S().cash += fee; S().month_.revenue += fee; G.addDark(10); return '合同签了，钱也收了。这笔账，监管来查时说不清。'; } },
         { label: '只签正规合同', hint: '一半可能客户走人',
           run: c => { const x = carOf(c.id); if (x && G.chance(0.5)) { G.sellRetail(x); return '客户犹豫了一下，还是按正规合同买了。'; } return '客户去别家找愿意配合的了。'; } },
       ],

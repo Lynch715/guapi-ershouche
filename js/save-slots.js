@@ -39,10 +39,10 @@ var G = globalThis.G = globalThis.G || {};
   };
   const write = (id, text, expected) => {
     try {
-      G.parseSave(text); // 先完整校验；失败时不写任何存储，也不替换当前局。
+      const canonical = JSON.stringify(G.parseSave(text)); // 校验并移除导入文件中的额外渲染字段。
       const previous = read(id);
       if (expected !== undefined && previous.raw !== expected) return fail('这个档位刚刚有变化，请返回存档页核对后再操作。');
-      const entry = { format: 'guapi-slot-v1', savedAt: new Date().toISOString(), data: text };
+      const entry = { format: 'guapi-slot-v1', savedAt: new Date().toISOString(), data: canonical };
       storage().setItem(key(id), JSON.stringify(entry));
       return { ok: true, msg: '已保存到档位 ' + id + '。' };
     } catch (e) { return fail(errorText(e)); }

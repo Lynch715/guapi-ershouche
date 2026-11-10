@@ -127,8 +127,8 @@ check(!G.act.borrow('store', 100000).ok, '征信差借不到钱');
 // 买家车贷：服务费、民间车贷断供决策
 s = stocked(25);
 const car = s.cars[0]; G.act.setFinance(car.id, 'private');
-const before = s.cash; G.sellRetail(car, 200000);
-check(s.cash === before + 200000 + G.round(200000 * G.BUYER_FINANCE.private.fee, 100), '民间车贷收服务费');
+const before = s.cash, salePrice = G.eventSalePrice(car,200000); G.sellRetail(car, 200000);
+check(s.cash === before + salePrice + G.round(salePrice * G.BUYER_FINANCE.private.fee, 100), '民间车贷按实际成交价收服务费');
 check(s.buyerLoans.length === 1, '民间车贷记入担保');
 const originalDefaultRate = G.BUYER_FINANCE.private.defaultRate;
 G.BUYER_FINANCE.private.defaultRate = 1;          // 强制断供

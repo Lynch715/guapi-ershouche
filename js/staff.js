@@ -14,7 +14,7 @@ var G = globalThis.G = globalThis.G || {};
 
   function sum(key) {
     let t = 0;
-    for (const e of S().staff) { const v = G.ROLES[e.role][key]; if (v) t += v[e.level - 1]; }
+    for (const e of G.Staff.active()) { const v = G.ROLES[e.role][key]; if (v) t += v[e.level - 1]; }
     return G.STAFF_CAPS[key] !== undefined ? Math.min(t, G.STAFF_CAPS[key]) : t;
   }
 
@@ -25,8 +25,10 @@ var G = globalThis.G = globalThis.G || {};
 
   G.Staff = {
     list: role => S().staff.filter(e => !role || e.role === role),
+    isActive: e => (e.startsMonth || 0) <= S().month,
+    active: role => S().staff.filter(e => G.Staff.isActive(e) && (!role || e.role === role)),
     slots: () => G.level().staffSlots,
-    payroll: () => S().staff.reduce((t, e) => t + e.salary, 0),
+    payroll: () => G.Staff.active().reduce((t, e) => t + e.salary, 0),
     apRaw: () => Math.round(sum('ap')),
     apBonus: () => Math.min(Math.round(sum('ap')), G.level().apCap),
     trafficMult: () => 1 + sum('traffic'),
@@ -71,11 +73,12 @@ var G = globalThis.G = globalThis.G || {};
       s.candidates = Array.from({ length: n }, () => this.makeCandidate());
     },
     monthly() {
-      for (const e of S().staff) e.tenure++;
+      for (const e of S().staff) if ((e.startsMonth || 0) < S().month) e.tenure++;
       this.refreshCandidates();
     },
     /** 加入团队（招聘和事件里共用） */
     add(e) {
+      e.startsMonth = S().month + 1;
       S().staff.push(e);
       G.log(`${G.ROLES[e.role].name}${e.name}入职（${e.level}级，月薪 ${G.fmt(e.salary)}）`, 'good');
     },

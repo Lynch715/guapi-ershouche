@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>全面审计修复验收</title>
+<style>body{font:15px system-ui;background:#111215;color:#ecedf0;margin:16px}button{font:inherit;padding:12px;margin:4px;border-radius:8px}iframe{width:100%;height:740px;border:1px solid #555}li{margin:8px 0}.fail{color:#ff9a95}.pass{color:#7ce4ad}</style>
+<h1>全面审计修复验收</h1><p>只使用本机合成存档。请通过下方按钮运行浏览器故障与旧档回归。</p>
+<button id="run">运行修复回归</button><button id="store">展示四级门店</button><pre id="status">等待运行</pre><ol id="checks"></ol><iframe id="game" title="验收游戏" data-src="../index.html"></iframe>
+<script>
+const frame=document.querySelector('#game'),status=document.querySelector('#status'),checks=document.querySelector('#checks');
+const localOnly=location.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname);
+if(localOnly)frame.src=frame.dataset.src;
+else{document.querySelector('#run').disabled=true;document.querySelector('#store').disabled=true;status.textContent='本工具仅允许在独立 localhost 预览端口运行，不在正式网站执行。';}
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+async function until(fn){for(let i=0;i<100;i++){if(fn())return;await pause(30);}throw new Error('等待界面超时');}
+function check(value,label){const li=document.createElement('li');li.className=value?'pass':'fail';li.textContent=(value?'通过：':'失败：')+label;checks.appendChild(li);if(!value)throw new Error(label);}
+function game(){const w=frame.contentWindow;return {w,d:w.document,G:w.G};}
+function reset(G){Object.assign(G.ui,{tab:'stock',buyerId:null,menu:false,help:false,saveDialog:null,confirm:null,report:null,result:null,settling:false});G.Tutorial.stop(false);}
+function stock(G){const c=G.Car.generate('private',{hiddenRate:0});c.flaws=[];G.addCar(c,30000,'浏览器验收合成车');return c;}
+document.querySelector('#run').onclick=async()=>{
+ if(!localOnly)return;
+ const button=document.querySelector('#run');button.disabled=true;checks.replaceChildren();status.textContent='运行中';
+ const {w,d,G}=game();const storageSet=w.Storage.prototype.setItem;
+ try{
+  check(!!G?.render,'真实游戏脚本已载入');
+  G.newGame('small','suburb',1110);reset(G);const c=stock(G);G.render();
+  check([...d.querySelectorAll('select')].every(x=>x.getAttribute('aria-label')),'库存下拉框都有可访问名称');
+  const open=d.querySelector('[data-act="menu"]');open.focus();open.click();
+  let dialog=d.querySelector('[role="dialog"]');
+  check(dialog.contains(d.activeElement),'打开弹窗时接管焦点');
+  check([...d.querySelector('#app').children].filter(x=>!x.matches('.overlay')).every(x=>x.hasAttribute('inert')),'背景页面全部设为 inert');
+  const controls=[...dialog.querySelectorAll('button,input,select,summary')].filter(x=>x.getAttribute('aria-disabled')!=='true'&&!x.disabled);
+  controls.at(-1).focus();const forward=new w.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true});d.activeElement.dispatchEvent(forward);
+  check(forward.defaultPrevented&&d.activeElement===controls[0],'Tab 在弹窗末尾返回第一个控件');
+  controls[0].focus();const backward=new w.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true});d.activeElement.dispatchEvent(backward);
+  check(backward.defaultPrevented&&d.activeElement===controls.at(-1),'Shift+Tab 在弹窗开头返回最后控件');
+  const month=G.state.month;d.querySelector('[data-act="end-month"]').click();check(G.state.month===month,'背景按钮的程序点击也不能绕过弹窗');
+  d.querySelector('[data-act="menu-close"]').click();
+  check(d.activeElement?.dataset.act==='menu','关闭弹窗后恢复菜单按钮焦点');
+  check(![...d.querySelector('#app').children].some(x=>x.hasAttribute('inert')),'关闭弹窗后恢复背景交互');
+  const gesture=new w.Event('gesturestart',{cancelable:true,bubbles:true});d.dispatchEvent(gesture);
+  const key=new w.KeyboardEvent('keydown',{key:'+',ctrlKey:true,cancelable:true,bubbles:true});d.dispatchEvent(key);
+  check(!gesture.defaultPrevented&&!key.defaultPrevented&&!d.querySelector('meta[name="viewport"]').content.includes('user-scalable=no'),'不再拦截浏览器缩放');
+
+  // Exercise both import sanitization and the report renderer independently.
+  const imported=JSON.parse(JSON.stringify(G.state));
+  imported.month_.negotiatedSales=[{name:'<img src=x onerror="document.documentElement.dataset.auditHtml=1">',price:10000,profit:1000,warranty:'',art:'<img src=x onerror="document.documentElement.dataset.auditHtml=1">'}];
+  imported.month_.opexBy={'<b id="audit-html-marker">审计标记</b>':100};
+  const originalSlot=w.localStorage.getItem(G.SaveSlots.key(2));
+  check(G.SaveSlots.import(2,JSON.stringify(imported),originalSlot).ok&&G.SaveSlots.load(2).ok,'带旧版渲染字段的文件可以安全导入和读取');
+  check(!('art' in G.state.month_.negotiatedSales[0]),'读取后删除存档中的美术 HTML');
+  const oldRows=imported.month_.negotiatedSales;
+  G.ui.report={date:'安全验证',month:1,sales:oldRows,customers:0,lines:[],revenue:10000,cogs:9000,opex:100,profit:900,opexBy:imported.month_.opexBy};G.render();await pause(60);
+  check(!d.documentElement.dataset.auditHtml&&!d.querySelector('#audit-html-marker'),'原始危险字段不能创建节点或执行事件脚本');
+  check(d.querySelector('.report').textContent.includes('<img src=x')&&d.querySelector('.opex-by').textContent.includes('<b id='),'车名与费用分类显示为字面文本');
+
+  G.newGame('small','suburb',1111);reset(G);G.render();
+  w.Storage.prototype.setItem=function(k,v){if(k===G.SAVE_KEY)throw new w.DOMException('Audit quota','QuotaExceededError');return storageSet.call(this,k,v);};
+  d.querySelector('[data-act="end-month"]').click();await until(()=>d.querySelector('.report'));
+  check(G.saveStatus==='failed'&&d.querySelector('.report [role="alert"]')?.textContent.includes('未能自动保存'),'真实月结保存失败时有持久警告');
+  check(d.querySelector('#toast').textContent.includes('没存上'),'月结保存失败也触发轻提示');
+  G.ui.report=null;G.ui.menu=true;G.render();
+  check(d.querySelector('.save-summary').textContent.includes('尚未保存')&&!!d.querySelector('[data-act="save-retry"]'),'存档菜单展示未落盘状态和重试入口');
+  w.Storage.prototype.setItem=storageSet;
+  d.querySelector('[data-act="save-retry"]').click();
+  check(G.saveStatus==='saved'&&!d.querySelector('[data-act="save-retry"]'),'重试成功后解除未保存状态');
+
+  const legacy=await (await fetch('fixtures/legacy-v1.json')).text();
+  const slotBefore=w.localStorage.getItem(G.SaveSlots.key(3));
+  check(G.SaveSlots.import(3,legacy,slotBefore).ok&&G.SaveSlots.load(3).ok,'发布前 0bd1765 真实旧引擎合成档导入与读取成功');
+  check(G.state.cars.length===1&&!!G.state.cars[0].buyer,'旧档保留库存和中途买家洽谈');
+  reset(G);G.render();
+  d.querySelector('[data-act="end-month"]').click();await until(()=>d.querySelector('.report'));
+  check(G.state.month===2&&!!d.querySelector('.report'),'旧档通过真实月结按钮续玩一个月');
+  check(G.parseSave(w.localStorage.getItem(G.SAVE_KEY)).month===2,'续玩后的自动进度可再次读取');
+  status.textContent=`全部通过：${checks.children.length} 项浏览器修复回归`;
+  button.textContent='重新运行修复回归';
+ }catch(e){status.textContent='失败：'+e.message;console.error(e);}
+ finally{w.Storage.prototype.setItem=storageSet;button.disabled=false;}
+};
+document.querySelector('#store').onclick=()=>{if(!localOnly)return;const {G}=game();G.newGame('mid','city',1112);reset(G);G.state.store.level=4;G.ui.tab='store';G.render();status.textContent='四级门店美术预览';};
+</script></html>

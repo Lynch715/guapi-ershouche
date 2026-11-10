@@ -112,7 +112,7 @@ G.CONFIG.keyart = 'a';
    * 遮罩由 tools/make_paint_masks.py 生成：车窗、车灯、轮胎轮毂不会被染色
    */
   G.ASSET_EXT = 'webp';
-  const A = p => G.ASSET_BASE + (p.startsWith('icon/') ? p : p + '.' + G.ASSET_EXT);
+  const A = p => G.ASSET_BASE + (p.startsWith('icon/') ? p : p + '.' + G.ASSET_EXT) + (p === 'store/store_l4' ? '?v=20261110.4' : '');
   G.assetPath = A;
   const MODELS = ['family', 'suv', 'ev', 'perf', 'lux', 'classic'];
   const tintColor = c => (lum(c) < 0.2 ? lighten(c, 0.12) : c);   // 纯黑叠出来会糊成一片，稍微提亮
@@ -310,7 +310,7 @@ G.CONFIG.keyart = 'a';
   };
 
   /* ---------- 头像、结局、主视觉 ---------- */
-  G.Art.staffGender = e => e.gender || (/姐/.test(e.name) ? 'f' : (/经理|师傅|会计/.test(e.name) ? (e.id % 2 ? 'f' : 'm') : (e.id % 3 ? 'm' : 'f')));
+  G.Art.staffGender = e => ['m','f'].includes(e.gender) ? e.gender : (/姐/.test(e.name) ? 'f' : (/经理|师傅|会计/.test(e.name) ? (e.id % 2 ? 'f' : 'm') : (e.id % 3 ? 'm' : 'f')));
   G.Art.avatar = function (e) {
     if (!G.ASSET_PACK.staff) return null;
     return `<img class="avatar-img" src="${A(`staff/staff_${e.role}_${G.Art.staffGender(e)}`)}" alt="">`;

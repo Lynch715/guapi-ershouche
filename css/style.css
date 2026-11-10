@@ -469,4 +469,18 @@ input,select,textarea { min-height:44px; min-width:44px; }
 .buyer-dialog .modal-foot .trade-actions { margin:0 0 8px; }
 .sales li.sale-no-art { grid-template-columns:minmax(0,1fr) auto; }
 .sales li.sale-no-art > small { grid-column:1 / -1; }
+/* 审计修复：提高可读性，以暖金边框衔接首图、车辆和头像。 */
+.stat label { font-size:12px; }
+.stat small { font-size:12px; line-height:1.4; }
+.svcs .btn small { font-size:12px; }
+.pending-staff { color:var(--gold2); }
+.car-art { border-radius:12px; background:radial-gradient(ellipse at 50% 68%,#53442b22,transparent 72%); }
+.staff .avatar { border:1px solid #8b6c3b; box-shadow:0 0 0 3px #e2b8660d; }
+/* 双店资产更宽，单独取景让两栋展厅和中央前院占满场景。 */
+.store-building.l4 { height:140%; bottom:-3%; }
+.modal:focus { outline:none; }
+button:focus-visible,select:focus-visible,summary:focus-visible { outline:2px solid var(--gold2); outline-offset:3px; }
+.team-grid { display:grid; gap:12px; }
+.team-grid .card { margin-bottom:0; }
+@media(min-width:1000px) { .team-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:460px) { .trade-choices { grid-template-columns:1fr; } .trade-choices .btn { flex-direction:row; align-items:center; justify-content:space-between; gap:8px; min-height:44px; padding:10px 12px; } .trade-choices small { margin:0; } }

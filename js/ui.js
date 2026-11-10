@@ -6,13 +6,42 @@ var G = globalThis.G = globalThis.G || {};
 
 (function () {
   const ui = G.ui = { tab: 'buy', stockPage: 1, buyerId: null, report: null, result: null, help: false, saveDialog: null, settling: false, menu: false, confirm: null, importData: '', entry: null, newGameApproved: false };
-  let previousHUD = null, renderedState = null, lockedScroll = 0;
-  function syncOverlay() {
+  let previousHUD = null, renderedState = null, lockedScroll = 0, returnFocus = null;
+  const focusKey = el => el && el !== document.body ? { id:el.id, attrs:[...el.attributes].filter(a => a.name.startsWith('data-') || a.name === 'aria-label').map(a => [a.name,a.value]) } : null;
+  const findFocus = (key, root = document) => {
+    if (!key) return null;
+    if (key.id) { const el=document.getElementById(key.id); if (el && root.contains(el)) return el; }
+    return key.attrs.length ? [...root.querySelectorAll('button,input,select,summary,textarea,a')].find(el => key.attrs.every(([k,v]) => el.getAttribute(k) === v)) : null;
+  };
+  const focusables = root => [...root.querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex="0"]')].filter(el => !el.disabled && el.getAttribute('aria-disabled') !== 'true' && el.getClientRects().length);
+  function syncOverlay(beforeFocus) {
     const open = !!document.querySelector('.overlay, .month-transition');
     const wasOpen = document.body.classList.contains('modal-open');
+    const app = document.getElementById('app');
+    for (const child of app.children) child.inert = open && !child.matches('.overlay,.month-transition');
+    if (open && !wasOpen) returnFocus = beforeFocus;
     if (open && !wasOpen) { lockedScroll = window.scrollY; document.body.style.top = -lockedScroll + 'px'; document.body.classList.add('modal-open'); }
     else if (!open && wasOpen) { document.body.classList.remove('modal-open'); document.body.style.top = ''; window.scrollTo(0, lockedScroll); }
+    const dialog = document.querySelector('.modal,.month-transition');
+    if (dialog) {
+      dialog.tabIndex = -1;
+      (findFocus(beforeFocus,dialog) || dialog).focus({preventScroll:true});
+    } else if (wasOpen) { findFocus(returnFocus)?.focus({preventScroll:true}); returnFocus = null; }
   }
+  document.addEventListener('keydown', e => {
+    const dialog=document.querySelector('.modal,.month-transition');
+    if (!dialog || e.key !== 'Tab') return;
+    const controls=[...focusables(dialog),...focusables(document.getElementById('tutorial-card') || document.createElement('div'))];
+    if (!controls.length) { e.preventDefault();dialog.focus({preventScroll:true});return; }
+    const index=controls.indexOf(document.activeElement);
+    if (index < 0 || (!e.shiftKey && index === controls.length-1) || (e.shiftKey && index === 0)) {
+      e.preventDefault();controls[e.shiftKey ? controls.length-1 : 0].focus({preventScroll:true});
+    }
+  });
+  document.addEventListener('focusin', e => {
+    const dialog=document.querySelector('.modal,.month-transition');
+    if (dialog && !dialog.contains(e.target) && !e.target.closest('#tutorial-card')) dialog.focus({preventScroll:true});
+  });
   const fmt = n => G.fmt(n);
   const dealFmt = n => G.fmtTrade(n);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -44,7 +73,7 @@ var G = globalThis.G = globalThis.G || {};
       section('隐瞒与黑化', `掩盖问题默认增加 ${c.concealDark} 黑化，重大问题另算。隐藏车况能抬高买家眼中的估值，但售后旧账会在潜伏 ${c.bombDormant.join('～')} 个月后继续追你 ${c.bombLifetime} 个月。`) +
       section('抽查与查封', `黑化超过 ${c.inspectSurgeAt} 进入突击检查期，达到 ${c.sealDark} 查封。每月自然回落 ${c.darkDecay}，主动报备减 ${c.reportDark}。规模超过 ${fmt(c.capitalRisk.threshold)} 后，隐瞒台账越多、黑化越高，越容易被盯上。`) +
       section('口碑', `开局 ${c.startRep}。口碑提高客流，客户投诉与曝光会伤口碑；高于 ${c.startRep} 的部分每月回落 ${pct(c.repDecay)}，得持续经营。`) +
-      section('员工', `经理增加行动点，技师节省整备，销售提高客流，财务减少罚款赔偿。${G.STORE_LEVELS.slice(1).map(l => `${l.name}编制 ${l.staffSlots} 人、行动点加成上限 ${l.apCap}`).join('；')}。新员工下月开始干活，辞退补一个月工资。`) +
+      section('员工', `经理增加行动点，技师节省整备，销售提高客流，财务减少罚款赔偿。${G.STORE_LEVELS.slice(1).map(l => `${l.name}编制 ${l.staffSlots} 人、行动点加成上限 ${l.apCap}`).join('；')}。新员工下月上岗，工资和各项加成都从下月开始，辞退补一个月工资。`) +
       section('贷款与抵押', `${Object.values(G.LOANS).map(l => `${l.name}月息 ${(l.rate * 100).toFixed(1)}%、${l.term} 期、最高抵押物的 ${pct(l.ltv)}`).join('；')}。连续逾期 ${G.FINANCE.seizeAfter} 个月会拍卖库存或法拍门店。民间车贷基础月断供 ${pct(G.BUYER_FINANCE.private.defaultRate)}，大规模集中担保会提高断供率与催收代价。车主抵押借款月息 ${G.PLEDGE.rate.map(pct).join('～')}，查登记 ${fmt(G.PLEDGE.checkCost)}，别把二次抵押当捡漏。`) +
       section('结局条件', `净资产达到所选目标即可通关：${c.difficulties.map(d => `${d.name} ${fmt(d.goal)}`).join('；')}。黑化达到 ${c.sealDark} 查封；现金窟窿靠甩车也填不平会破产，长期亏损同样可能关门；门店贷连续逾期 ${G.FINANCE.seizeAfter} 个月触发法拍。`) +
       `<p class="muted">当前进度在本浏览器自动保留。菜单里有三个独立的手动档位，可自行保存、读取和导出；导入时可选择目标档位。${G.state ? '' : '开张后可重新播放引导。'}</p>`,
@@ -261,8 +290,8 @@ var G = globalThis.G = globalThis.G || {};
         <div class="row list-row">
           <label>挂牌价 <input type="number" step="0.01" min="0" data-price="${c.id}" value="${(c.price / 10000).toFixed(2)}"> 万</label>
           ${c.autoPrice !== false ? '<span class="chip chip-fixed">自动跟随估值</span>' : `<button class="btn sm" data-act="suggest" data-car="${c.id}">恢复自动定价</button>`}
-          <select data-warranty="${c.id}">${Object.entries(G.WARRANTY).map(([k, w]) => `<option value="${k}" ${c.warranty === k ? 'selected' : ''}>${w.name}</option>`).join('')}</select>
-          <select data-finance="${c.id}" title="给买家的金融方案">${Object.entries(G.BUYER_FINANCE).map(([k, f]) => `<option value="${k}" ${(c.finance || 'none') === k ? 'selected' : ''}>${f.name}${f.fee ? ` +${Math.round(f.fee * 100)}%服务费` : ''}</option>`).join('')}</select>
+          <select data-warranty="${c.id}" aria-label="${esc(c.name)}的质保方案">${Object.entries(G.WARRANTY).map(([k, w]) => `<option value="${k}" ${c.warranty === k ? 'selected' : ''}>${w.name}</option>`).join('')}</select>
+          <select data-finance="${c.id}" aria-label="${esc(c.name)}的金融方案" title="给买家的金融方案">${Object.entries(G.BUYER_FINANCE).map(([k, f]) => `<option value="${k}" ${(c.finance || 'none') === k ? 'selected' : ''}>${f.name}${f.fee ? ` +${Math.round(f.fee * 100)}%服务费` : ''}</option>`).join('')}</select>
         </div>
         <small class="${margin >= 0 ? 'pos' : 'neg'}">按挂牌价成交 毛利 ${fmt(margin)}</small>
         <div class="trade-actions"><button class="btn sm" data-act="reduce-price" data-car="${c.id}">降价 3%</button><button class="btn sm primary" data-act="buyer-meet" data-car="${c.id}">${c.buyer?.month === G.state.month ? c.buyer.status === 'left' ? '查看本月洽谈' : '继续和买家谈' : `接待买家 · ${G.TRADE.buyerAP}点`}</button></div>
@@ -327,7 +356,7 @@ var G = globalThis.G = globalThis.G || {};
           <div class="row"><h4>${esc(e.name)} <small class="muted">${r.name}</small></h4><span class="stars">${stars(e.level)}</span></div>
           <p class="muted">${G.Staff.effectText(e.role, e.level)}</p>
           <div class="row">
-            <span>月薪 <b class="gold">${fmt(e.salary)}</b>${hire ? '' : ` <small class="muted">· 在职 ${e.tenure} 月</small>`}</span>
+            <span>月薪 <b class="gold">${fmt(e.salary)}</b>${hire ? '' : G.Staff.isActive(e) ? ` <small class="muted">· 在职 ${e.tenure} 月</small>` : ' <small class="pending-staff">· 下月上岗，本月不计薪</small>'}</span>
             ${hire
               ? `<button class="btn sm primary" data-act="hire" data-id="${e.id}">招聘</button>`
               : `<button class="btn sm" data-act="fire" data-id="${e.id}">辞退<small>补偿 ${fmt(e.salary)}</small></button>`}
@@ -341,11 +370,11 @@ var G = globalThis.G = globalThis.G || {};
       <div class="card">
         <div class="row"><h4>团队 ${s.staff.length}/${G.Staff.slots()} 人</h4><span class="muted">月薪合计 ${fmt(G.Staff.payroll())}</span></div>
         <p class="muted">全店加成：${G.Staff.summary()}</p>
-        <small class="muted">新人下月上岗。至于人品，处久了才知道。</small>
+        <small class="muted">新人下月上岗，工资和加成届时生效。至于人品，处久了才知道。</small>
       </div>
-      ${s.staff.length ? s.staff.map(e => staffCard(e, false)).join('') : '<div class="empty small">还没有员工，大小事都得你亲自来</div>'}
+      ${s.staff.length ? '<div class="team-grid">'+s.staff.map(e => staffCard(e, false)).join('')+'</div>' : '<div class="empty small">还没有员工，大小事都得你亲自来</div>'}
       <h4 class="section">本月来应聘的${full ? '<small class="muted">（编制已满，升级门店可以扩编）</small>' : ''}</h4>
-      ${s.candidates.length ? s.candidates.map(e => staffCard(e, true)).join('') : '<p class="muted">这个月没人来应聘</p>'}
+      ${s.candidates.length ? '<div class="team-grid">'+s.candidates.map(e => staffCard(e, true)).join('')+'</div>' : '<p class="muted">这个月没人来应聘</p>'}
       <p class="muted center">候选人每月刷新</p>`;
   }
 
@@ -440,13 +469,17 @@ var G = globalThis.G = globalThis.G || {};
     requestAnimationFrame(tick);
   }
   function reportModal(r) {
-    const sales = r.sales.length
-      ? `<ul class="sales">${r.sales.map((x,i) => `<li class="${x.art ? '' : 'sale-no-art'}" style="animation-delay:${i*80}ms">${x.art || ''}<span>${esc(x.name)}${x.warranty ? ` <small class="muted">${esc(x.warranty)}</small>` : ''}</span><b>${dealFmt(x.price)}</b><small class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.profit >= 0 ? '+' : ''}${dealFmt(x.profit)}</small></li>`).join('')}</ul>`
-      : '<p class="muted">这个月一台都没卖出去</p>';
+    const wholesale = x => ['peer','auction','liquidation'].includes(x.type);
+    const saleList = rows => `<ul class="sales">${rows.map((x,i) => {
+      const art = Object.prototype.hasOwnProperty.call(G.CATEGORIES,x.catId) ? G.Art.car({id:x.carId || 1,catId:x.catId,color:x.color,flaws:[]},{size:56,plain:true}) : '';
+      return `<li class="${art ? '' : 'sale-no-art'}" style="animation-delay:${i*80}ms">${art}<span>${esc(x.name)}${x.warranty ? ` <small class="muted">${esc(x.warranty)}</small>` : ''}</span><b>${dealFmt(x.price)}</b><small class="${x.profit >= 0 ? 'pos' : 'neg'}">${x.profit >= 0 ? '+' : ''}${dealFmt(x.profit)}</small></li>`;
+    }).join('')}</ul>`;
+    const retail = r.sales.filter(x => !wholesale(x)), peers = r.sales.filter(wholesale);
+    const sales = r.sales.length ? (retail.length ? `<h4>零售成交 · ${retail.length} 台</h4>${saleList(retail)}` : '') + (peers.length ? `<h4>批发与处置 · ${peers.length} 台</h4>${saleList(peers)}` : '') : '<p class="muted">这个月一台都没卖出去</p>';
     const lines = r.lines.map(l => `<li class="log-${esc(l.type)}">${esc(l.text)}</li>`).join('');
     return modal(`${r.date} 月结`, `
       <p class="muted">本月进店客户 ${r.customers} 位</p>
-      <h4>成交</h4>${sales}
+      <h4>本月成交 · ${r.sales.length} 台</h4>${sales}
       ${lines ? `<h4>本月动态</h4><ul class="log">${lines}</ul>` : ''}
       <div class="pnl">
         <div><small>收入</small><b>${fmt(r.revenue)}</b></div>
@@ -456,8 +489,9 @@ var G = globalThis.G = globalThis.G || {};
         <div><small>资产变化</small><b class="${(r.netChange || 0) >= 0 ? 'pos' : 'neg'}" data-count="${r.netChange || 0}">${fmt(r.netChange || 0)}</b></div>
         <div><small>黑化变化</small><b class="${(r.darkChange || 0) > 0 ? 'neg' : 'pos'}" data-count="${r.darkChange || 0}" data-unit="dark">${(r.darkChange || 0) > 0 ? '+' : ''}${r.darkChange || 0}</b></div>
       </div>
-      <p class="muted">还有没处理的事，钱要等谈完再算。</p>
-      ${Object.keys(r.opexBy || {}).length ? `<p class="muted opex-by">费用明细：${Object.entries(r.opexBy).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}</p>` : ''}`,
+      ${G.cleanPending() ? '<p class="muted">还有没处理的事，钱要等谈完再算。</p>' : ''}
+      ${G.saveStatus === 'failed' ? '<p class="neg" role="alert">本月进度未能自动保存，请打开存档菜单导出备份。</p>' : ''}
+      ${Object.keys(r.opexBy || {}).length ? `<p class="muted opex-by">费用明细：${Object.entries(r.opexBy).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${fmt(v)}`).join(' · ')}</p>` : ''}`,
     `<button class="btn primary" data-act="close-report">${G.cleanPending() ? '处理 ' + G.state.pending.length + ' 件事' : '继续经营'}</button>`, 'report');
   }
 
@@ -465,7 +499,7 @@ var G = globalThis.G = globalThis.G || {};
     const d = G.currentDecision(), more = G.state.pending.length - 1;  // currentDecision 已清理过
     return modal(d.title, `${d.car ? `<div class="car-art">${G.Art.car(d.car, { size: 260 })}</div>` : ''}<p>${esc(d.text)}</p>
       <div class="options">${d.options.map((o, i) => `<button class="btn option" data-act="decide" data-i="${i}" ${o.disabled ? 'disabled' : ''}>
-        <b>${o.label}</b><small>${o.disabled ? o.disabled : o.hint || '&nbsp;'}</small></button>`).join('')}</div>
+        <b>${esc(o.label)}</b><small>${esc(o.disabled || o.hint || ' ')}</small></button>`).join('')}</div>
       ${more ? `<p class="muted center">还有 ${more} 件事等你处理</p>` : ''}`,
     '', `decision tone-${d.tone || 'bad'}`);
   }
@@ -496,8 +530,8 @@ var G = globalThis.G = globalThis.G || {};
     if (!s) return '';
     if (ui.report) return reportModal(ui.report);
     if (ui.result) return modal('结果', `<p>${esc(ui.result)}</p>`, '<button class="btn primary" data-act="close-result">好</button>');
-    if (G.cleanPending()) return decisionModal();
     if (s.over) return overModal();
+    if (G.cleanPending()) return decisionModal();
     if (s.visit) return visitModal();
     if (s.pledgeVisit) return pledgeModal();
     const buyerCar = s.cars.find(c => c.id === ui.buyerId && c.buyer?.month === s.month);
@@ -509,6 +543,7 @@ var G = globalThis.G = globalThis.G || {};
   /* ---------- 渲染 ---------- */
   function render() {
     const app = document.getElementById('app');
+    const beforeFocus = focusKey(document.activeElement);
     const oldModal = app.querySelector('.modal');
     const modalScroll = oldModal ? { title: oldModal.getAttribute('aria-label'), top: oldModal.querySelector('.modal-body').scrollTop } : null;
     const resume = !G.state ? G.SaveSlots.resume() : null;
@@ -519,7 +554,7 @@ var G = globalThis.G = globalThis.G || {};
     app.classList.toggle('at-entry', !G.state && entry === 'continue');
     if (renderedState !== G.state) { previousHUD = null; ui.buyerId = null; renderedState = G.state; }
     const currentHUD = G.Feedback.snapshot();
-    if (!G.state) { app.innerHTML = (entry === 'continue' ? continueScreen(resume, slots) : startScreen(returning)) + currentModal(); G.Art.preload?.(resume.summary?.locationId); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(); return; }
+    if (!G.state) { app.innerHTML = (entry === 'continue' ? continueScreen(resume, slots) : startScreen(returning)) + currentModal(); G.Art.preload?.(resume.summary?.locationId); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(beforeFocus); return; }
     const body = { buy: buyTab, stock: stockTab, team: teamTab, store: storeTab, ledger: ledgerTab }[ui.tab]();
     const scroll = window.scrollY;
     app.innerHTML = `${hud()}${tabs()}<main>${body}</main>
@@ -529,7 +564,7 @@ var G = globalThis.G = globalThis.G || {};
     if (modalScroll && newModal?.getAttribute('aria-label') === modalScroll.title) newModal.querySelector('.modal-body').scrollTop = modalScroll.top;
     window.scrollTo(0, scroll);
     G.Tutorial?.render();
-    G.Feedback.prepare(); syncOverlay();
+    G.Feedback.prepare(); syncOverlay(beforeFocus);
     G.Feedback.changes(previousHUD, currentHUD); previousHUD = currentHUD;
     animateReport();
     if (!ui.settling && G.state.over) G.Feedback.big(G.state.over === 'win' ? 'win' : 'bad', 'over:' + G.state.seed + ':' + G.state.over);
@@ -537,11 +572,16 @@ var G = globalThis.G = globalThis.G || {};
     else if (!ui.settling && !ui.report && !ui.result && G.state.pending[0] && ['complaint','buyerDefault','pledgeDispute'].includes(G.state.pending[0].type)) G.Feedback.big('bad', 'pending:' + G.state.seed + ':' + G.state.month + ':' + JSON.stringify(G.state.pending[0]));
   }
   G.render = render;
+  G.persistProgress = () => {
+    const saved=G.save();
+    if (!saved) toast('这次没存上，去菜单里备份一下，别让生意白忙。',true);
+    return saved;
+  };
 
   function run(res, quiet) {
     if (res && !res.ok) { toast(res.msg, true); G.Sound?.play('bad'); }
     else if (res && res.msg && !quiet) toast(res.msg);
-    if (G.state && !G.save()) toast('这次没存上，去菜单里备份一下，别让生意白忙。', true);
+    if (G.state) G.persistProgress();
     render();
   }
 
@@ -611,7 +651,7 @@ var G = globalThis.G = globalThis.G || {};
         const res = G.act.endMonth();
         if (!res.ok) { ui.settling = false; run(res, true); return; }
         res.report.newRecord = res.report.profit > oldPeak;
-        G.Sound.play('month'); G.Feedback.vibrate('month'); G.save(); render();
+        G.Sound.play('month'); G.Feedback.vibrate('month'); G.persistProgress(); render();
         setTimeout(() => { ui.settling = false; ui.report = res.report; render(); }, reducedMotion() ? 0 : 700);
       });
     },
@@ -625,6 +665,7 @@ var G = globalThis.G = globalThis.G || {};
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]');
     if (!el) return;
+    if (document.querySelector('.overlay,.month-transition') && !el.closest('.overlay')) return;
     if (el.getAttribute('aria-disabled') === 'true') { e.preventDefault(); toast(el.dataset.disabledReason, true); return; }
     if (ui.settling) { toast('账还在算，稍等一下'); return; }
     if (!el.disabled && handlers[el.dataset.act]) handlers[el.dataset.act](el);

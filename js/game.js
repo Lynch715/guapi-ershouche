@@ -52,7 +52,7 @@ var G = globalThis.G = globalThis.G || {};
     const c = G.CONFIG;
     const scale = G.clamp((G.netWorth() - c.capitalRisk.threshold) / c.capitalRisk.ramp, 0, 1);
     const hidden = s.cars.filter(car => car.flaws.some(f => f.concealed && !f.fixed)).length + s.sales.filter(x => x.concealed && !x.audited && x.month >= s.month - 6).length;
-    return scale * (Math.min(1, hidden / G.capacity()) * c.capitalRisk.inspectScale + c.capitalRisk.darkInspectScale * Math.pow(s.dark / 100, c.inspectDarkExp)) + G.loc().inspect + G.level().inspectBonus + c.inspectDarkScale * Math.pow(s.dark / 100, c.inspectDarkExp) + (s.dark > c.inspectSurgeAt ? c.inspectSurge : 0);
+    return G.clamp(scale * (Math.min(1, hidden / G.capacity()) * c.capitalRisk.inspectScale + c.capitalRisk.darkInspectScale * Math.pow(s.dark / 100, c.inspectDarkExp)) + G.loc().inspect + G.level().inspectBonus + c.inspectDarkScale * Math.pow(s.dark / 100, c.inspectDarkExp) + (s.dark > c.inspectSurgeAt ? c.inspectSurge : 0), 0, 1);
   };
 
   G.guard = (ap, cash) => guard(ap, cash);
@@ -85,6 +85,8 @@ var G = globalThis.G = globalThis.G || {};
     const s = S(), before = s.dark;
     if (n > 0 && s.perks.thirdParty) n = Math.ceil(n * G.CONFIG.thirdPartyDarkMult);
     s.dark = G.clamp(s.dark + n, 0, 100);
+    // 查封一旦触发，月底自然回落不能撤销；其他终局继续沿用原判定时点。
+    if (!s.over && s.dark >= G.CONFIG.sealDark) s.over = 'sealed';
     const d = s.dark - before;
     if (d && why) G.log(`${why}：黑化 ${d > 0 ? '+' : ''}${d}`, d > 0 ? 'dark' : 'good');
   };
@@ -123,7 +125,7 @@ var G = globalThis.G = globalThis.G || {};
       dark: 0, rep: G.CONFIG.startRep,
       store: { level: 1, location: locId },
       market: Object.fromEntries(Object.keys(G.CATEGORIES).map(k => [k, 1])),
-      cars: [], sales: [], warranties: [], bombs: [], pending: [], visit: null,
+      cars: [], sales: [], returnedSales: [], warranties: [], bombs: [], pending: [], visit: null,
       buffs: { ad: false, traffic: 1 }, flags: { reported: false },
       perks: { thirdParty: false }, eventCd: {}, eventsSeen: {},
       month_: { revenue: 0, cogs: 0, opex: 0 },
@@ -141,8 +143,8 @@ var G = globalThis.G = globalThis.G || {};
   G.SAVE_KEY = 'usedcar_sim_save_v1';
   const hasLS = () => { try { return typeof localStorage !== 'undefined'; } catch (_) { return false; } };
   G.save = () => {
-    try { if (!hasLS() || !G.state) return false; localStorage.setItem(G.SAVE_KEY, JSON.stringify(G.state)); return true; }
-    catch (_) { return false; }
+    try { if (!hasLS() || !G.state) { G.saveStatus = 'failed'; return false; } localStorage.setItem(G.SAVE_KEY, JSON.stringify(G.state)); G.saveStatus = 'saved'; return true; }
+    catch (_) { G.saveStatus = 'failed'; return false; }
   };
   G.hasSave = () => { try { return hasLS() && !!localStorage.getItem(G.SAVE_KEY); } catch (_) { return false; } };
   G.load = () => {
@@ -161,7 +163,7 @@ var G = globalThis.G = globalThis.G || {};
     });
     s.perks = Object.assign({ thirdParty: false }, s.perks);
     for (const key of ['eventCd', 'eventsSeen']) s[key] = s[key] || {};
-    for (const key of ['staff', 'sales', 'warranties', 'bombs', 'pending', 'history', 'log']) s[key] = s[key] || [];
+    for (const key of ['staff', 'sales', 'returnedSales', 'warranties', 'bombs', 'pending', 'history', 'log']) s[key] = s[key] || [];
     s.month_ = Object.assign({ revenue: 0, cogs: 0, opex: 0, opexBy: {} }, s.month_);
     s.stats = Object.assign({ bought: 0, sold: 0, soldPeer: 0, peakProfit: 0, greyOps: 0 }, s.stats);
     s.lossStreak = s.lossStreak ?? 0;
@@ -195,7 +197,7 @@ var G = globalThis.G = globalThis.G || {};
     need(G.CONFIG.difficulties.some(d => d.id === s.diffId), '启动资金档无效');
     need(object(s.market) && Object.keys(G.CATEGORIES).every(k => number(s.market[k], 0.01)), '行情数据无效');
     need(Array.isArray(s.cars) && s.cars.length <= 1000, '缺少库存或车辆过多');
-    for (const key of ['staff','candidates','sales','warranties','bombs','pending','history','log','loans','buyerLoans','pledges']) need(s[key] === undefined || Array.isArray(s[key]), `有一段记录不完整`);
+    for (const key of ['staff','candidates','sales','returnedSales','warranties','bombs','pending','history','log','loans','buyerLoans','pledges']) need(s[key] === undefined || Array.isArray(s[key]), `有一段记录不完整`);
     for (const key of ['buffs','flags','perks','eventCd','eventsSeen','month_','stats']) need(s[key] === undefined || object(s[key]), `有一段记录不完整`);
     if (s.candidates === undefined && s.staff?.length) s.candidates = [];
     s = G.migrate(s);
@@ -216,25 +218,80 @@ var G = globalThis.G = globalThis.G || {};
       }
     };
     s.cars.forEach(car);
+    need(s.returnedSales.every(id => integer(id, 1)), '退车记录损坏');
+    // 仅恢复有退车日志、销售记录和相同车辆资料佐证的旧版重复退车。
+    const groups = new Map();
+    for (const c of s.cars) { if (!groups.has(c.id)) groups.set(c.id, []); groups.get(c.id).push(c); }
+    for (const copies of groups.values()) {
+      if (copies.length < 2) continue;
+      const c = copies[0], fields = ['name','catId','newPrice','year','bornMonth','mileage','mileageShown','cost'];
+      const sale = s.sales.filter(x => x && x.name === c.name && x.price === c.cost);
+      const evidence = copies.every(x => x.inspected && fields.every(k => x[k] === c[k])) && sale.length === 1
+        && s.log.some(l => typeof l?.text === 'string' && l.text.includes(`「${c.name}」退车退款`));
+      need(evidence, '库存车辆编号重复');
+      for (const copy of copies.slice(1)) for (const flaw of copy.flaws) {
+        const f = c.flaws.find(x => x.id === flaw.id);
+        if (f) { f.known ||= flaw.known; f.fixed &&= flaw.fixed; f.concealed = false; }
+        else c.flaws.push({ ...flaw, concealed: false });
+      }
+      G.Car.reveal(c);
+      s.cars = s.cars.filter(x => x.id !== c.id || x === c);
+      if (!s.returnedSales.includes(sale[0].id)) s.returnedSales.push(sale[0].id);
+      s.log.unshift({m:s.month,type:'warn',text:`已合并「${c.name}」旧版重复退车记录，保留原账面资金。`});
+    }
+    if (s.returnedSales.length) {
+      const returned = new Set(s.returnedSales);
+      s.bombs = s.bombs.filter(b => !returned.has(b?.saleId));
+      s.warranties = s.warranties.filter(w => !returned.has(w?.saleId));
+      s.buyerLoans = s.buyerLoans.filter(b => !returned.has(b?.saleId));
+      s.pending = s.pending.filter(p => p?.type !== 'complaint' || !returned.has(p.data?.saleId));
+    }
     need(new Set(s.cars.map(c => c.id)).size === s.cars.length, '库存车辆编号重复');
-    for (const e of [...s.staff, ...s.candidates]) need(object(e) && integer(e.id, 1) && keyOf(G.ROLES, e.role) && integer(e.level, 1, 3) && number(e.salary, 0) && number(e.integrity, 0, 1) && integer(e.tenure) && typeof e.name === 'string', '员工资料损坏');
+    const employee = e => {
+      need(object(e) && integer(e.id, 1) && keyOf(G.ROLES, e.role) && integer(e.level, 1, 3) && number(e.salary, 0) && number(e.integrity, 0, 1) && integer(e.tenure) && typeof e.name === 'string', '员工资料损坏');
+      need(e.startsMonth === undefined || integer(e.startsMonth, 1), '员工上岗月份损坏');
+      need(e.gender === undefined || ['m','f'].includes(e.gender), '员工头像资料损坏');
+    };
+    [...s.staff, ...s.candidates].forEach(employee);
     for (const l of s.loans) need(object(l) && integer(l.id, 1) && keyOf(G.LOANS, l.type) && ['principal','remaining','rate','term','monthsLeft','payment','overdue'].every(k => number(l[k], 0)), '车行贷款损坏');
-    for (const b of s.buyerLoans) need(object(b) && integer(b.id, 1) && typeof b.name === 'string' && number(b.balance, 0) && number(b.total, 1) && number(b.monthsLeft, 0), '担保贷款损坏');
+    for (const b of s.buyerLoans) need(object(b) && integer(b.id, 1) && typeof b.name === 'string' && number(b.balance, 0) && number(b.total, 1) && number(b.monthsLeft, 0) && (b.saleId === undefined || integer(b.saleId,1)), '担保贷款损坏');
     const pledge = p => { need(object(p) && integer(p.id, 1) && typeof p.client === 'string' && ['amount','rate','term'].every(k => number(p[k], 0)), '车主抵押损坏'); car(p.car); };
     s.pledges.forEach(p => { pledge(p); need(number(p.monthsLeft, 0), '抵押期限损坏'); });
     for (const b of s.bombs) { need(keyOf(G.FLAWS, b.flawId) && number(b.price, 0) && number(b.monthsLeft, 0), '售后记录损坏'); car(b.car); }
     for (const w of s.warranties) need(object(w) && typeof w.name === 'string' && number(w.monthsLeft, 0) && number(w.newPrice, 0) && Array.isArray(w.mech) && w.mech.every(k => G.FLAWS[k]?.mech), '质保记录损坏');
     for (const p of s.pending) {
       need(object(p) && keyOf(G.DECISIONS, p.type) && object(p.data), '待办类型无效');
-      if (p.type === 'event') need(keyOf(G.EVENT_MAP, p.data.id) && object(p.data.ctx), '事件卡损坏');
+      if (p.type === 'event') {
+        need(keyOf(G.EVENT_MAP, p.data.id) && object(p.data.ctx), '事件卡损坏');
+        if (p.data.ctx.car !== undefined) car(p.data.ctx.car);
+        if (p.data.ctx.cand !== undefined) employee(p.data.ctx.cand);
+      }
       else if (p.type === 'complaint') { need(keyOf(G.FLAWS, p.data.flawId) && number(p.data.price, 0), '投诉损坏'); car(p.data.car); }
       else if (p.type === 'pledgeDispute') pledge(p.data);
-      else if (p.type === 'buyerDefault') need(number(p.data.loss, 0) && (typeof p.data.name === 'string' || (Array.isArray(p.data.names) && p.data.names.every(n => typeof n === 'string'))), '断供记录损坏');
+      else if (p.type === 'buyerDefault') {
+        need(number(p.data.loss, 0) && (typeof p.data.name === 'string' || (Array.isArray(p.data.names) && p.data.names.every(n => typeof n === 'string'))), '断供记录损坏');
+        if (p.data.items !== undefined) need(Array.isArray(p.data.items) && p.data.items.every(x => object(x) && typeof x.name === 'string' && number(x.loss,0) && (x.saleId === undefined || integer(x.saleId,1))), '断供明细损坏');
+      }
     }
     need(s.over === null || ['win','sealed','bankrupt','foreclosed'].includes(s.over), '结局无效');
     need(number(s.credit, 0, 100) && number(s.storeValue, 0), '征信或抵押物损坏');
     need(['revenue','cogs','opex'].every(k => number(s.month_[k], 0)) && object(s.month_.opexBy), '月度账本损坏');
-    if (s.month_.negotiatedSales !== undefined) need(Array.isArray(s.month_.negotiatedSales) && s.month_.negotiatedSales.every(x => object(x) && typeof x.name === 'string' && typeof x.warranty === 'string' && number(x.price, 0) && number(x.profit)), '议价成交台账损坏');
+    need(Object.values(s.month_.opexBy).every(n => number(n,0)), '费用明细损坏');
+    const saleFields = ['name','price','profit','warranty','type','catId','color','carId'];
+    const saleEntries = entries => {
+      need(Array.isArray(entries), '成交台账损坏');
+      return entries.map(x => {
+        need(object(x) && typeof x.name === 'string' && typeof x.warranty === 'string' && number(x.price,0) && number(x.profit), '成交台账损坏');
+        need(x.type === undefined || ['retail','negotiated','event','peer','auction','liquidation'].includes(x.type), '成交渠道损坏');
+        need(x.catId === undefined || keyOf(G.CATEGORIES,x.catId), '成交车型损坏');
+        need(x.color === undefined || integer(x.color,0,8), '成交车漆损坏');
+        need(x.carId === undefined || integer(x.carId,1), '成交编号损坏');
+        // 美术只由渲染器生成，存档不接受 HTML / SVG 或其他额外字段。
+        return Object.fromEntries(Object.entries(x).filter(([k]) => saleFields.includes(k)));
+      });
+    };
+    for (const k of ['negotiatedSales','transactions']) if (s.month_[k] !== undefined) s.month_[k] = saleEntries(s.month_[k]);
+    if (object(s.lastReport) && Array.isArray(s.lastReport.sales)) s.lastReport.sales = saleEntries(s.lastReport.sales);
     need(Object.values(s.stats).every(v => number(v, 0)), '经营统计损坏');
     if (s.visit !== null && s.visit !== undefined) {
       need(object(s.visit) && keyOf(G.CHANNELS, s.visit.chId) && Array.isArray(s.visit.offers), '看车现场损坏');
@@ -272,6 +329,7 @@ var G = globalThis.G = globalThis.G || {};
       const candidate = G.parseSave(text);
       if (hasLS()) localStorage.setItem(G.SAVE_KEY, JSON.stringify(candidate));
       G.state = candidate;
+      G.saveStatus = hasLS() ? 'saved' : 'failed';
       return ok('存档读进来了，接着开张。');
     } catch (e) { return fail(e.name === 'QuotaExceededError' || e.name === 'SecurityError' ? '浏览器不允许写入存档，当前局未改变，请先导出备份' : /存档|JSON/.test(e.message) ? e.message : '这份存档暂时读不了：文件内容不完整，原来这局还在。'); }
   };
@@ -492,6 +550,7 @@ var G = globalThis.G = globalThis.G || {};
     s.cash += price; s.month_.revenue += price; s.month_.cogs += car.cost;
     s.cars.splice(s.cars.indexOf(car), 1);
     s.stats.soldPeer++;
+    G.recordSale(car, price, 'peer');
     G.log(`「${car.name}」批发给同行，回款 ${G.fmt(price)}`);
     return ok(`回款 ${G.fmt(price)}`);
   };
@@ -539,6 +598,7 @@ var G = globalThis.G = globalThis.G || {};
   G.DECISIONS = {};
   // 事件卡引用的库存车（ctx.id / ctx.ids / ctx.targetId）已经不在了，这张卡作废
   function eventStillValid(p) {
+    if (p.type === 'complaint') return !S().returnedSales?.includes(p.data.saleId) && !S().cars.some(c => c.id === p.data.car.id);
     if (p.type !== 'event') return true;
     const c = p.data.ctx, cars = S().cars;
     const refs = [c.id, c.targetId, ...(c.ids || [])].filter(x => x !== undefined);
@@ -553,13 +613,17 @@ var G = globalThis.G = globalThis.G || {};
     return p ? G.DECISIONS[p.type].view(p.data) : null;
   };
   G.act.decide = function (i) {
-    const s = S(), p = s.pending[0];
+    const s = S();
+    if (s.over) return fail('游戏已结束');
+    G.cleanPending();
+    const p = s.pending[0];
     if (!p) return fail('没有待办事件');
     const opt = G.currentDecision().options[i];
     if (!opt) return fail('这项现在选不了。');
     if (opt.disabled) return fail(opt.disabled);
     const text = G.DECISIONS[p.type].resolve(p.data, i);
-    s.pending.shift();
+    const index = s.pending.indexOf(p);
+    if (index >= 0) s.pending.splice(index,1);
     G.log(text, 'event');
     checkEnd();
     return ok(text);
@@ -586,12 +650,29 @@ var G = globalThis.G = globalThis.G || {};
       const s = S(), f = G.FLAWS[b.flawId];
       const comp = G.round(G.legalCost(b.price * hitOf(b.flawId) * G.CONFIG.compensateRate), 100);
       if (i === 0) {
+        if (s.returnedSales?.includes(b.saleId) || s.cars.some(c => c.id === b.car.id)) return '这笔销售已退车，不再重复退款。';
         S().cash -= b.price;   // 退车：钱退回、车回库（成本按退款价计），不算经营费用
         const car = b.car;
-        car.flaws.forEach(x => { if (x.id === b.flawId) { x.known = true; } x.concealed = false; });
+        car.flaws.forEach(x => { x.concealed = false; });
+        G.Car.reveal(car);
+        delete car.buyer;
         Object.assign(car, { cost: b.price, warranty: 'none', monthsInStock: 0, inspected: true, autoPrice: true, finance: 'none' });
         car.price = G.suggestPrice(car);
         s.cars.push(car);
+        s.returnedSales = s.returnedSales || [];
+        if (b.saleId !== undefined) s.returnedSales.push(b.saleId);
+        const sameSale = x => b.saleId !== undefined && x.saleId === b.saleId;
+        s.bombs = s.bombs.filter(x => !sameSale(x) && x.car.id !== car.id);
+        s.warranties = s.warranties.filter(x => !sameSale(x));
+        const legacyLoans = s.buyerLoans.filter(x => x.saleId === undefined && x.name === car.name && x.balance === G.round(b.price*G.BUYER_FINANCE.private.lossRate,100));
+        s.buyerLoans = s.buyerLoans.filter(x => !sameSale(x) && !(legacyLoans.length === 1 && x === legacyLoans[0]));
+        s.pending = s.pending.filter(p => p.type !== 'complaint' || (!sameSale(p.data) && p.data.car.id !== car.id));
+        for (const p of s.pending) if (p.type === 'buyerDefault' && p.data.items) {
+          p.data.items = p.data.items.filter(x => !sameSale(x));
+          p.data.names = p.data.items.map(x => x.name);
+          p.data.loss = p.data.items.reduce((sum,x) => sum+x.loss,0);
+        }
+        s.pending = s.pending.filter(p => p.type !== 'buyerDefault' || p.data.loss > 0);
         if (b.knowing) { G.addDark(G.CONFIG.complaintDark.refund); G.addRep(-3); } else G.addRep(2);
         return `「${b.name}」退车退款 ${G.fmt(b.price)}，车辆回到库存${s.cars.length > G.capacity() ? '（已超出库存上限）' : ''}`;
       }
@@ -714,11 +795,12 @@ var G = globalThis.G = globalThis.G || {};
 
   function sellRetail(car, r, priceOverride) {
     const s = S(), price = priceOverride ?? car.price;
+    if (!s.cars.includes(car)) return null;
     s.cash += price; s.month_.revenue += price; s.month_.cogs += car.cost;
     s.cars.splice(s.cars.indexOf(car), 1);
     const saleId = s.nextId++;
     const hidden = car.flaws.filter(f => !f.fixed && !G.Car.seen(f, 'public'));
-    s.sales.push({ id: saleId, month: s.month, name: car.name, price, cost: car.cost, concealed: hidden.some(f => f.known), audited: false });
+    s.sales.push({ id: saleId, carId:car.id, month: s.month, name: car.name, price, cost: car.cost, concealed: hidden.some(f => f.known), audited: false });
     if (s.sales.length > 200) s.sales.shift();
     const wd = G.WARRANTY[car.warranty];
     if (wd.months) s.warranties.push({
@@ -731,13 +813,30 @@ var G = globalThis.G = globalThis.G || {};
       name: car.name, price, soldMonth: s.month, car: JSON.parse(JSON.stringify(car)),
     });
     s.stats.sold++;
-    G.Finance.onSale(car, price, r);
-    if (r) r.sales.push({ name: car.name, price, profit: price - car.cost, warranty: wd.months ? wd.name : '', art: G.Art ? G.Art.car(car, { size: 56, plain: true }) : '' });
-    else G.log(`「${car.name}」成交 ${G.fmt(price)}，毛利 ${G.fmt(price - car.cost)}`);
+    G.Finance.onSale(car, price, r, saleId);
+    G.recordSale(car, price, r ? 'retail' : car.buyer?.month === s.month ? 'negotiated' : 'event');
+    if (!r) G.log(`「${car.name}」成交 ${G.fmt(price)}，毛利 ${G.fmt(price - car.cost)}`);
     return s.sales[s.sales.length - 1];
   }
-  /** 事件里直接成交一台车（会正常产生质保和隐患） */
-  G.sellRetail = (car, price) => sellRetail(car, null, price);
+  G.monthSales = () => {
+    const m = S().month_;
+    if (!m.transactions) m.transactions = (m.negotiatedSales || []).map(x => ({...x,type:'negotiated'}));
+    return m.transactions;
+  };
+  G.recordSale = (car, price, type) => {
+    const row = {name:car.name,price,profit:price-car.cost,warranty:G.WARRANTY[car.warranty]?.months ? G.WARRANTY[car.warranty].name : '',type,carId:car.id,catId:car.catId};
+    if (car.color !== undefined) row.color = car.color;
+    G.monthSales().push(row);
+    return row;
+  };
+  // 事件报价不消耗 RNG；只给收藏家保留明确的 25% 特殊溢价。
+  G.eventSalePrice = (car, requested = car.price, collector = false) => {
+    const willingness = collector ? 1.25 : G.CUSTOMER.willing[1] + G.WARRANTY[car.warranty].bonus + G.Finance.willBonus(car);
+    const cap = Math.max(1, Math.floor(G.Car.value(car,'public') * willingness));
+    return Math.max(1, Math.min(cap, Math.round(requested)));
+  };
+  /** 事件共用预算上限；主动洽谈与月底零售已各自检查预算。 */
+  G.sellRetail = (car, price, collector = false) => sellRetail(car, null, G.eventSalePrice(car,price,collector));
 
   const buyerTerms = car => ({ value: Math.max(1,G.Car.value(car,'public')), price: car.price, warranty: car.warranty, finance: car.finance || 'none' });
   // 条件改变只重估同一位买家，不重抽预算偏好、不恢复耐心或轮次。
@@ -1014,6 +1113,7 @@ var G = globalThis.G = globalThis.G || {};
       const p = Math.round(G.peerPrice(car) * 0.9);
       s.cash += p; s.month_.revenue += p; s.month_.cogs += car.cost;
       s.cars.splice(s.cars.indexOf(car), 1);
+      G.recordSale(car,p,'liquidation');
       r.lines.push({ type: 'bad', text: `资金链紧张，「${car.name}」被迫甩卖 ${G.fmt(p)}` });
     }
     if (s.cash < 0) s.over = 'bankrupt';
@@ -1025,7 +1125,7 @@ var G = globalThis.G = globalThis.G || {};
     if (G.cleanPending()) return fail('请先处理待办事件');
     s.visit = null; s.pledgeVisit = null;
     const beforeNet = G.netWorth(), beforeDark = s.dark;
-    const r = { month: s.month, date: G.dateLabel(), sales: [...(s.month_.negotiatedSales || [])], lines: [], customers: 0 };
+    const r = { month: s.month, date: G.dateLabel(), sales: [], lines: [], customers: 0 };
 
     G.refreshAutoPrices();
     runSales(r);
@@ -1037,6 +1137,8 @@ var G = globalThis.G = globalThis.G || {};
     runMarket(r);
     runInspection(r);
     runLiquidation(r);
+    // 也保护没有经过 addDark 的旧档或月结扩展入口。
+    if (!s.over && s.dark >= G.CONFIG.sealDark) s.over = 'sealed';
 
     const m = s.month_;
     r.revenue = m.revenue; r.cogs = m.cogs; r.opex = m.opex; r.opexBy = m.opexBy || {};
@@ -1045,7 +1147,7 @@ var G = globalThis.G = globalThis.G || {};
     s.history.push({ level: s.store.level, month: s.month, revenue: m.revenue, cogs: m.cogs, opex: m.opex, opexBy: m.opexBy || {}, profit: r.profit, cash: s.cash, net: r.net, dark: s.dark, rep: s.rep });
     s.stats.peakProfit = Math.max(s.stats.peakProfit, r.profit);
     // 黑化自然回落：旧账慢慢被时间冲淡
-    if (s.dark > 0 && G.CONFIG.darkDecay) s.dark = Math.max(0, s.dark - G.CONFIG.darkDecay);
+    if (s.over !== 'sealed' && s.dark > 0 && G.CONFIG.darkDecay) s.dark = Math.max(0, s.dark - G.CONFIG.darkDecay);
     // 口碑向 50 回落：高口碑要持续维护
     if (s.rep > 50) s.rep -= Math.ceil((s.rep - 50) * G.CONFIG.repDecay);
     else if (s.rep < 50 && G.chance(0.5)) s.rep += 1;
@@ -1057,6 +1159,7 @@ var G = globalThis.G = globalThis.G || {};
     s.buffs.ad = false;
     s.buffs.traffic = 1;
     s.flags.reported = false;
+    r.sales = G.monthSales().map(x => ({...x}));
     s.month_ = { revenue: 0, cogs: 0, opex: 0, opexBy: {} };
     checkEnd();
     G.Staff.monthly();

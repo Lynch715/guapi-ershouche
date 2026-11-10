@@ -51,13 +51,13 @@ var G = globalThis.G = globalThis.G || {};
 
     /* ---------- 卖车时 ---------- */
     willBonus(car) { return G.BUYER_FINANCE[car.finance || 'none'].bonus; },
-    onSale(car, price, r) {
+    onSale(car, price, r, saleId) {
       const s = S(), bf = G.BUYER_FINANCE[car.finance || 'none'];
       if (!bf.fee) return;
       const fee = G.round(price * bf.fee, 100);
       s.cash += fee; s.month_.revenue += fee;
       if (car.finance === 'private') {
-        s.buyerLoans.push({ id: s.nextId++, name: car.name, balance: G.round(price * bf.lossRate, 100), total: bf.months, monthsLeft: bf.months });
+        s.buyerLoans.push({ id: s.nextId++, saleId, name: car.name, balance: G.round(price * bf.lossRate, 100), total: bf.months, monthsLeft: bf.months });
         if (bf.dark) G.addDark(bf.dark);
       }
       const line = `「${car.name}」走${bf.name}，服务费 +${G.fmt(fee)}`;
@@ -109,6 +109,7 @@ var G = globalThis.G = globalThis.G || {};
         const p = Math.round(G.peerPrice(car) * 0.85);
         owed -= p; s.month_.revenue += p; s.month_.cogs += car.cost;
         G.removeCar(car);
+        G.recordSale(car,p,'auction');
         r.lines.push({ type: 'bad', text: `「${car.name}」被银行强制拍卖，抵债 ${G.fmt(p)}` });
       }
       s.loans = s.loans.filter(x => x !== l);
@@ -126,19 +127,19 @@ var G = globalThis.G = globalThis.G || {};
     runBuyerLoans(r) {
       const s = S(), bf = G.BUYER_FINANCE.private;
       const risk = this.buyerRisk();
-      const names = []; let loss = 0;
+      const names = [], items = []; let loss = 0;
       s.buyerLoans = s.buyerLoans.filter(b => {
         b.monthsLeft--;
         if (G.chance(risk.defaultRate)) {
           const l = G.round(b.balance * (b.monthsLeft + 1) / b.total, 100);
-          if (l > 0) { names.push(b.name); loss += l; }
+          if (l > 0) { names.push(b.name); loss += l; items.push({name:b.name,loss:l,...(b.saleId === undefined ? {} : {saleId:b.saleId})}); }
           return false;
         }
         return b.monthsLeft > 0;
       });
       // 本月所有断供合并成一件事处理
       if (names.length) {
-        s.pending.push({ type: 'buyerDefault', data: { names, loss, riskLoad: risk.load } });
+        s.pending.push({ type: 'buyerDefault', data: { names, loss, riskLoad: risk.load, items } });
         r.lines.push({ type: 'bad', text: `本月 ${names.length} 位民间车贷买家断供，要垫付 ${G.fmt(loss)}` });
       }
     },
@@ -172,6 +173,8 @@ var G = globalThis.G = globalThis.G || {};
       Object.assign(car, { cost });
       const p = G.peerPrice(car);
       s.cash += p; s.month_.revenue += p; s.month_.cogs += cost;
+      G.recordSale(car,p,'peer');
+      s.stats.soldPeer++;
       const line = `库存满了，「${car.name}」直接批发给同行 ${G.fmt(p)}`;
       if (r) r.lines.push({ type: 'warn', text: line }); else G.log(line);
     },
@@ -311,7 +314,7 @@ var G = globalThis.G = globalThis.G || {};
       }
       const cost = G.round(p.amount * 0.3);
       G.spend(cost, '灰色操作'); G.addDark(6);
-      G.Finance.takeCar(p.car, p.amount + cost, '私下摆平');
+      G.Finance.takeCar(p.car, p.amount, '私下摆平');
       return `花 ${G.fmt(cost)} 摆平了，「${p.car.name}」归你`;
     },
   };

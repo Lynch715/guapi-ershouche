@@ -12,7 +12,7 @@ var G = globalThis.G = globalThis.G || {};
  const S=G.SaveUI={
   menu(){
    const s=G.state, slots=G.SaveSlots.list();
-   const summary=s?`<div class="save-summary"><span>当前进度 · 自动保留 <b>第 ${s.month} 月 · ${esc(G.LOCATIONS[s.store.location].name)}</b></span><span>净资产 <b>${G.fmt(G.netWorth())}</b></span><span>黑化 <b>${s.dark}</b></span><span>口碑 <b>${s.rep}</b></span></div>`:'';
+   const summary=s?`<div class="save-summary"><span>当前进度 · ${G.saveStatus==='failed'?'尚未保存':'自动保留'} <b>第 ${s.month} 月 · ${esc(G.LOCATIONS[s.store.location].name)}</b></span><span>净资产 <b>${G.fmt(G.netWorth())}</b></span><span>黑化 <b>${s.dark}</b></span><span>口碑 <b>${s.rep}</b></span></div>${G.saveStatus==='failed'?'<p class="neg" role="alert">自动保存失败，当前进度仍在本页。请先导出备份，或重试保存。</p><button class="btn" data-act="save-retry">重试自动保存</button>':''}`:'';
    const cards=slots.map(slot=>`<section class="save-slot ${slot.empty?'is-empty':''}" data-slot="${slot.id}" aria-label="档位 ${slot.id}"><div class="save-slot-heading"><b>档位 ${slot.id}</b><span>${slot.empty?'空档位':slot.status==='ready'?esc(date(slot.savedAt)):'暂时无法读取'}</span></div><p class="save-slot-info">${slotInfo(slot)}${slot.legacy?'<small>原来的自动存档已备份到这里</small>':''}</p><div class="save-slot-actions"><button class="btn ${slot.empty&&s?'primary':''}" data-act="slot-save" data-slot="${slot.id}" ${!s||slot.status==='unavailable'?'disabled':''}>保存到此</button><button class="btn" data-act="slot-load" data-slot="${slot.id}" ${slot.status!=='ready'?'disabled':''}>读取</button><button class="btn" data-act="slot-export" data-slot="${slot.id}" ${slot.empty||slot.status==='unavailable'?'disabled':''}>导出</button></div></section>`).join('');
    const actions=`<button class="btn" data-act="save-import">导入存档到档位</button>${s?`<div class="menu-group"><button class="btn primary" data-act="menu-close">继续游戏</button><button class="btn" data-act="save-export">导出当前进度</button></div><button class="btn" data-act="new-game">新开一局</button><div class="menu-group"><button class="btn" data-act="mute" aria-pressed="${!G.Sound.muted}">音效：${G.Sound.muted?'关':'开'}</button><button class="btn" data-act="vibration" aria-pressed="${G.Feedback.vibration}">震动：${G.Feedback.vibration?'开':'关'}</button></div><button class="btn" data-act="help">游戏帮助</button><button class="btn" data-act="tutorial-replay">重新看一遍引导</button>`:''}`;
    return shell('存档',summary+'<p class="save-intro">三个档位由你手动保存，继续经营不会覆盖。导入时可选择目标档位。</p>'+`<div class="save-slots">${cards}</div>`+(G.SaveSlots.error?`<p class="neg" role="alert">${esc(G.SaveSlots.error)}</p>`:'')+actions+`<p class="menu-version">瓜皮二手车 ${G.VERSION}</p>`,'','save-menu');
@@ -39,6 +39,7 @@ var G = globalThis.G = globalThis.G || {};
   },
   handlers:{
    menu(){ui().menu=true;draw();},
+   'save-retry'(){if(G.persistProgress())toast('当前进度已自动保存。');draw();},
    'menu-close'(){cancelFileRead();ui().menu=false;ui().saveDialog=null;ui().confirm=null;ui().help=false;draw();},
    'new-game'(){ui().confirm='restart';draw();},
    restart(){ui().menu=true;ui().confirm='restart';draw();},

@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "seed": 1108,
+  "rngState": -1903082202,
+  "startedAt": "2026-11-10T16:38:14.316Z",
+  "month": 1,
+  "ap": 2,
+  "cash": 4922000,
+  "goal": 100000000,
+  "diffId": "small",
+  "dark": 0,
+  "rep": 50,
+  "store": {
+    "level": 1,
+    "location": "suburb"
+  },
+  "market": {
+    "family": 1,
+    "suv": 1,
+    "ev": 1,
+    "perf": 1,
+    "lux": 1,
+    "classic": 1
+  },
+  "cars": [
+    {
+      "id": 4,
+      "name": "韩系轿车·玄甲",
+      "catId": "family",
+      "newPrice": 216000,
+      "year": 2022,
+      "bornMonth": 1,
+      "mileage": 67500,
+      "mileageShown": 67500,
+      "flaws": [
+        {
+          "id": "dirty",
+          "known": true,
+          "concealed": false,
+          "fixed": false
+        }
+      ],
+      "inspected": true,
+      "cost": 72000,
+      "price": 102000,
+      "warranty": "none",
+      "monthsInStock": 0,
+      "boughtMonth": 1,
+      "source": "个人散户",
+      "autoPrice": true,
+      "finance": "none",
+      "buyer": {
+        "month": 1,
+        "style": 0,
+        "anchor": 102000,
+        "quote": 94100,
+        "budget": 102000,
+        "willingness": 1.1553097762633113,
+        "terms": {
+          "value": 94327,
+          "price": 102000,
+          "warranty": "none",
+          "finance": "none"
+        },
+        "rounds": 0,
+        "patience": 4,
+        "status": "talking",
+        "message": "买家：“9.41万，合适我今天就开走。”",
+        "history": [
+          {
+            "round": 0,
+            "ask": null,
+            "quote": 94100,
+            "text": "买家：“9.41万，合适我今天就开走。”"
+          }
+        ]
+      }
+    }
+  ],
+  "sales": [],
+  "warranties": [],
+  "bombs": [],
+  "pending": [],
+  "visit": null,
+  "buffs": {
+    "ad": false,
+    "traffic": 1
+  },
+  "flags": {
+    "reported": false
+  },
+  "perks": {
+    "thirdParty": false
+  },
+  "eventCd": {},
+  "eventsSeen": {},
+  "month_": {
+    "revenue": 0,
+    "cogs": 0,
+    "opex": 6000,
+    "opexBy": {
+      "验车": 6000
+    }
+  },
+  "history": [],
+  "log": [
+    {
+      "m": 1,
+      "text": "从个人散户收购「韩系轿车·玄甲」，7.2万",
+      "type": "info"
+    },
+    {
+      "m": 1,
+      "text": "车行开业！地段：城郊产业园，启动资金 500万。",
+      "type": "info"
+    }
+  ],
+  "lossStreak": 0,
+  "stats": {
+    "bought": 1,
+    "sold": 0,
+    "soldPeer": 0,
+    "peakProfit": 0,
+    "greyOps": 0
+  },
+  "staff": [],
+  "candidates": [
+    {
+      "id": 1,
+      "role": "finance",
+      "level": 1,
+      "name": "胡会计",
+      "salary": 14500,
+      "integrity": 0.49,
+      "tenure": 0
+    },
+    {
+      "id": 2,
+      "role": "sales",
+      "level": 2,
+      "name": "小罗",
+      "salary": 25000,
+      "integrity": 0.3,
+      "tenure": 0
+    },
+    {
+      "id": 3,
+      "role": "sales",
+      "level": 1,
+      "name": "小马",
+      "salary": 14500,
+      "integrity": 0.29,
+      "tenure": 0
+    }
+  ],
+  "loans": [],
+  "buyerLoans": [],
+  "pledges": [],
+  "credit": 80,
+  "storeValue": 500000,
+  "pledgeVisit": null,
+  "nextId": 8,
+  "over": null,
+  "lastReport": null
+}

@@ -4,7 +4,7 @@
  * ========================================================= */
 var G = globalThis.G = globalThis.G || {};
 
-G.VERSION = 'v1.1';
+G.VERSION = 'v1.1.1';
 // 议价按车辆分别记录，最多三轮；只有主动接待新买家花行动点。
 G.TRADE = {
   rounds: 3, buyerAP: 1,
@@ -160,7 +160,7 @@ G.MODEL_NAMES = ['风语', '青岚', '远航者', '赤焰', '银隼', '云栖', 
 G.FLAWS = {
   scratch:  { name: '漆面划痕',     visible: true,  hit: 0.04 },
   tires:    { name: '轮胎老化',     visible: true,  hit: 0.03 },
-  dirty:    { name: '内饰脏污',     visible: true,  hit: 0.03 },
+  dirty:    { name: '车身/内饰脏污', visible: true, hit: 0.03 },
   battery:  { name: '电瓶亏电',     visible: true,  hit: 0.02 },
   chassis:  { name: '底盘暗伤',     visible: false, hit: 0.12, grade: 'B', repairRate: 0.05, mech: true, bombRate: 0.04 },
   gearbox:  { name: '变速箱隐患',   visible: false, hit: 0.15, grade: 'B', repairRate: 0.07, mech: true, bombRate: 0.045 },
@@ -216,7 +216,7 @@ G.CUSTOMER = {
 
 /* 结局 */
 G.ENDINGS = {
-  win_clean: { title: '良心车行连锁大佬', text: '你没靠一台黑车，把小门店做成了全城最有口碑的车行。同行背后骂你傻，客户排队找你买车。' },
+  win_clean: { title: '良心车行连锁大佬', text: '一路经营到今天，你把小门店做成了车行连锁。现在的你守住了口碑，也学会了让生意走得更稳。过去的得失留在账本里，今后的路还得认真走。' },
   win_grey:  { title: '灰色暴发户',       text: '钱是赚到了，但每次电话响你都会心里一紧。那些卖出去的车，不知道哪天会找上门。' },
   foreclosed: { title: '门店被法拍', text: '月供一拖再拖，银行终于失去了耐心。法院的封条贴在了展厅大门上。' },
   bankrupt:  { title: '破产清算',         text: '资金链断了。库存被低价甩卖，门店贴上了转租告示。' },
