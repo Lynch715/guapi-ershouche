@@ -45,7 +45,7 @@ var G = globalThis.G = globalThis.G || {};
       section('员工', `经理增加行动点，技师节省整备，销售提高客流，财务减少罚款赔偿。${G.STORE_LEVELS.slice(1).map(l => `${l.name}编制 ${l.staffSlots} 人、行动点加成上限 ${l.apCap}`).join('；')}。新员工下月开始干活，辞退补一个月工资。`) +
       section('贷款与抵押', `${Object.values(G.LOANS).map(l => `${l.name}月息 ${(l.rate * 100).toFixed(1)}%、${l.term} 期、最高抵押物的 ${pct(l.ltv)}`).join('；')}。连续逾期 ${G.FINANCE.seizeAfter} 个月会拍卖库存或法拍门店。民间车贷基础月断供 ${pct(G.BUYER_FINANCE.private.defaultRate)}，大规模集中担保会提高断供率与催收代价。车主抵押借款月息 ${G.PLEDGE.rate.map(pct).join('～')}，查登记 ${fmt(G.PLEDGE.checkCost)}，别把二次抵押当捡漏。`) +
       section('结局条件', `净资产达到所选目标即可通关：${c.difficulties.map(d => `${d.name} ${fmt(d.goal)}`).join('；')}。黑化达到 ${c.sealDark} 查封；现金窟窿靠甩车也填不平会破产，长期亏损同样可能关门；门店贷连续逾期 ${G.FINANCE.seizeAfter} 个月触发法拍。`) +
-      `<p class="muted">自动存档保存在本浏览器。菜单里的「存档」可以备份和恢复。${G.state ? '' : '开张后可重新播放引导。'}</p>`,
+      `<p class="muted">当前进度在本浏览器自动保留。菜单里有三个独立的手动档位，可自行保存、读取和导出；导入时可选择目标档位。${G.state ? '' : '开张后可重新播放引导。'}</p>`,
       `${G.state ? '<button class="btn" data-act="tutorial-replay">重新播放引导</button>' : ''}<button class="btn primary" data-act="help-close">收起指南</button>`, 'help');
   }
 

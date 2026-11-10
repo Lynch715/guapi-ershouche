@@ -27,7 +27,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await require('./start-screen-check')(p,w,h,out,check,result,prefix,online);
  await snapshot(p,prefix+(online?'-online-':'-start-')+(online?(w<500?'mobile':'desktop'):w));
  check(await p.locator('meta[name="viewport"]').getAttribute('content').then(s=>s.includes('user-scalable=no')),'viewport 已限制');
- await menu(p);check(await act(p,'save-import').count()===1&&await act(p,'save-export').count()===0,'未开局菜单只提供导入');await click(p,'menu-close');
+ await menu(p);check(await p.locator('.save-slot').count()===3&&await act(p,'save-import').count()===1&&await act(p,'save-export').count()===0,'未开局菜单支持导入与三个空档位');await click(p,'menu-close');
  await click(p,'start');check(await p.locator('#tutorial-card').count()===1,'首局引导出现');await p.locator('[data-tutorial="skip"]').click();
  await p.evaluate(()=>{G.state.rngState=303;G.state.seed=303;});
  await p.locator('[data-act="visit"][data-ch="private"]').click();await geometry(p,w+' 看车');await click(p,'inspect-visit');await click(p,'buy');check((await p.locator('#toast').innerText()).includes('花了'),'买车金额反馈');await click(p,'visit-close');
@@ -43,7 +43,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await click(p,'save-export');const exported=await p.locator('#save-text').inputValue();check(JSON.parse(exported).version===1,'导出保留原存档格式');await geometry(p,w+' 导出');
  const downloadPromise=p.waitForEvent('download');await click(p,'save-download');const downloaded=await downloadPromise;const file=await downloaded.path();check(fs.readFileSync(file,'utf8')===exported&&downloaded.suggestedFilename().endsWith('.txt'),'txt 下载内容完整');
  await click(p,'save-close');await click(p,'save-import');await p.locator('#save-text').fill('丢了半截的存档');await click(p,'save-apply');check((await p.locator('#save-error').innerText()).includes('不完整'),'坏存档用口语解释');check(await p.evaluate(()=>JSON.stringify(G.state))===exported,'坏存档不改变进度');
- await p.locator('#save-file').setInputFiles({name:'车行备份.txt',mimeType:'text/plain',buffer:Buffer.from(exported)});await p.waitForFunction(()=>document.getElementById('save-text').value.startsWith('{'));await click(p,'save-apply');check(await p.locator('.confirm-dialog').count()===1,'导入先确认');check(await p.evaluate(()=>JSON.stringify(G.state))===exported,'确认前不提交');await click(p,'confirm-no');await click(p,'save-apply');await click(p,'confirm-yes');check(await p.locator('.save-dialog').count()===0,'确认后读入存档');
+ await p.locator('#save-file').setInputFiles({name:'车行备份.txt',mimeType:'text/plain',buffer:Buffer.from(exported)});await p.waitForFunction(()=>document.getElementById('save-text').value.startsWith('{'));await click(p,'save-apply');check(await p.locator('.confirm-dialog').count()===1,'导入先确认');check(await p.evaluate(()=>JSON.stringify(G.state))===exported,'确认前不提交');await click(p,'confirm-no');await click(p,'save-apply');await click(p,'confirm-yes');check(await p.locator('.save-dialog').count()===0,'确认后存入指定档位');
  await menu(p);const muteBefore=await p.evaluate(()=>G.Sound.muted);await click(p,'mute');const vibeBefore=await p.evaluate(()=>G.Feedback.vibration);await click(p,'vibration');await p.reload();await click(p,'continue');check(await p.evaluate(()=>G.Sound.muted)!==muteBefore&&await p.evaluate(()=>G.Feedback.vibration)!==vibeBefore,'音效与震动偏好持久化');check(await p.locator('#tutorial-card').count()===0,'继续存档不重复引导');
  await menu(p);await click(p,'new-game');await click(p,'confirm-no');check(await p.evaluate(()=>G.state.month)===4,'取消新局保留进度');await click(p,'menu-close');
  for(const tab of ['buy','stock','team','store','ledger']){await p.locator(`[data-act="tab"][data-tab="${tab}"]`).click();await geometry(p,w+' '+tab);await p.evaluate(()=>scrollTo(0,document.body.scrollHeight));check(await p.evaluate(()=>document.querySelector('main').getBoundingClientRect().bottom<=document.querySelector('.bar-bottom').getBoundingClientRect().top+1),tab+' 页末不被月结遮住');}
@@ -51,6 +51,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await snapshot(p,prefix+'-menu-flow-'+w+(online?'-online':''));
  result.viewports.push({width:w,height:h});await ctx.close();
  }
+ if(!process.env.USEDCAR_WIDTH)await require('./save-slots-check')(browser,url,out,check,result,prefix,online);
  if(!process.env.USEDCAR_WIDTH)await require('./safe-area-check')(browser,url,out,check,result,prefix,online);
  if(!online){
  const ctx=await browser.newContext({viewport:{width:430,height:932},reducedMotion:'no-preference'});const p=await ctx.newPage();await p.goto(url);await p.evaluate(()=>{G.newGame('small','suburb',1100);G.ui.tab='buy';G.render();});

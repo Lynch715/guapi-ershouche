@@ -60,6 +60,7 @@ module.exports=async function safeAreaCheck(browser,url,out,check,result,prefix,
           }
           if(name==='save')G.ui.menu=true;
           if(name==='import'||name==='export')G.ui.saveDialog=name;
+          if(name==='export'){G.ui.exportText=JSON.stringify(G.state);G.ui.exportSlot=null;G.ui.exportMonth=G.state.month;}
           if(name==='confirm')G.ui.confirm='restart';
           if(name==='help')G.ui.help=true;
           if(name==='visit')G.act.visit('private');
