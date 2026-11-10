@@ -5,7 +5,7 @@
 var G = globalThis.G = globalThis.G || {};
 
 (function () {
-  const ui = G.ui = { tab: 'buy', stockPage: 1, report: null, result: null, help: false, saveDialog: null, settling: false, menu: false, confirm: null, importText: '' };
+  const ui = G.ui = { tab: 'buy', stockPage: 1, report: null, result: null, help: false, saveDialog: null, settling: false, menu: false, confirm: null, importText: '', entry: null, newGameApproved: false };
   let previousHUD = null, renderedState = null, lockedScroll = 0;
   function syncOverlay() {
     const open = !!document.querySelector('.overlay, .month-transition');
@@ -75,16 +75,16 @@ var G = globalThis.G = globalThis.G || {};
   }
 
   /* ---------- 开始界面 ---------- */
-  function startScreen() {
+  function startScreen(returning) {
     const diffs = G.CONFIG.difficulties.map((d, i) => `
       <label class="pick pick-funds">
-        <input type="radio" name="diff" value="${d.id}" ${i === 0 ? 'checked' : ''}>
+        <input type="radio" name="diff" value="${d.id}" ${(ui.newGameOptions ? ui.newGameOptions.diff === d.id : i === 0) ? 'checked' : ''}>
         <div><b>${d.name}</b><span>启动资金 ${fmt(d.cash)}</span><span class="muted">目标净资产 ${fmt(d.goal)}</span></div>
       </label>`).join('');
     const locs = Object.entries(G.LOCATIONS).map(([id, l], i) => `
       <label class="pick pick-location">
         <div class="loc-art">${G.Art.store(1, id)}</div>
-        <input type="radio" name="loc" value="${id}" ${i === 1 ? 'checked' : ''}>
+        <input type="radio" name="loc" value="${id}" ${(ui.newGameOptions ? ui.newGameOptions.loc === id : i === 1) ? 'checked' : ''}>
         <div class="loc-copy"><b>${l.name}</b><span>${l.desc}</span>
           <span class="muted">租金 ${level3(l.rent, 0.8, 1.1)} · 客流 ${level3(l.traffic, 1, 1.5)} · 抽查 ${level3(l.inspect, 0.05, 0.09)}</span></div>
       </label>`).join('');
@@ -92,11 +92,19 @@ var G = globalThis.G = globalThis.G || {};
       <div class="start">${toolbar()}
         <div class="start-intro"><div class="start-art">${G.Art.keyart()}</div></div>
         <div class="start-options">
+        ${returning?'<nav class="new-game-nav" aria-label="新局导航"><h2>新开一局</h2><button class="btn sm" data-act="entry-continue">返回继续上次</button></nav>':''}
         <h3>启动资金</h3><div class="picks">${diffs}</div>
         <h3>门店地段</h3><div class="picks">${locs}</div>
         <button class="btn primary big" data-act="start">开张营业</button>
-        ${G.hasSave() ? '<button class="btn big" data-act="continue">继续上次存档</button>' : ''}</div>
+        </div>
       </div>`;
+  }
+
+  function continueScreen(resume, slots) {
+    const r = resume.summary, available = slots.filter(slot => slot.status === 'ready').length;
+    const preview = r ? `<article class="resume-card"><div class="resume-art">${G.Art.store(r.level, r.locationId)}</div><div class="resume-details"><span class="muted">上次自动保留的进度${r.over?' · 已达成结局':''}</span><h2>${G.dateLabel(r.month)} · 第 ${r.month} 月</h2><p>${esc(r.location)} · ${esc(r.store)}</p><dl class="resume-stats"><div><dt>净资产</dt><dd>${fmt(r.net)}</dd></div><div><dt>现金</dt><dd>${fmt(r.cash)}</dd></div><div><dt>库存</dt><dd>${r.cars} 台</dd></div></dl></div></article>`
+      : `<div class="resume-empty"><h2>${resume.status==='empty'?'选择一份存档继续':'上次进度暂时无法读取'}</h2><p>${esc(resume.msg || (available?'已保留 '+available+' 个手动档位，选一份就能接着经营。':'可以读取手动档位，或导入之前备份的文件。'))}</p></div>`;
+    return `<div class="return-entry"><section class="return-shell">${toolbar()}<header class="return-heading"><p class="return-brand">瓜皮二手车</p><h1>继续上次</h1><p class="muted">欢迎回来，老板。生意接着做。</p></header>${preview}<div class="return-actions">${r?'<button class="btn primary big" data-act="continue">继续上次</button>':'<button class="btn primary big" data-act="menu">选择存档继续</button>'}<button class="btn big" data-act="entry-new">新开一局</button>${r?'<button class="btn" data-act="menu">选择其他存档 / 导入</button>':''}</div></section></div>`;
   }
 
   /* ---------- 顶部 HUD ---------- */
@@ -472,10 +480,15 @@ var G = globalThis.G = globalThis.G || {};
   /* ---------- 渲染 ---------- */
   function render() {
     const app = document.getElementById('app');
-    app.classList.toggle('at-start', !G.state);
+    const resume = !G.state ? G.SaveSlots.resume() : null;
+    const slots = !G.state ? G.SaveSlots.list() : [];
+    const returning = !G.state && (resume.status === 'ready' || resume.status === 'invalid' || slots.some(slot => !slot.empty && slot.status !== 'unavailable'));
+    const entry = ui.entry || (returning ? 'continue' : 'new');
+    app.classList.toggle('at-start', !G.state && entry === 'new');
+    app.classList.toggle('at-entry', !G.state && entry === 'continue');
     if (renderedState !== G.state) { previousHUD = null; renderedState = G.state; }
     const currentHUD = G.Feedback.snapshot();
-    if (!G.state) { app.innerHTML = startScreen() + currentModal(); G.Art.preload?.(); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(); return; }
+    if (!G.state) { app.innerHTML = (entry === 'continue' ? continueScreen(resume, slots) : startScreen(returning)) + currentModal(); G.Art.preload?.(resume.summary?.locationId); G.Tutorial?.render(); G.Feedback.prepare(); syncOverlay(); return; }
     const body = { buy: buyTab, stock: stockTab, team: teamTab, store: storeTab, ledger: ledgerTab }[ui.tab]();
     const scroll = window.scrollY;
     app.innerHTML = `${hud()}${tabs()}<main>${body}</main>
@@ -499,6 +512,13 @@ var G = globalThis.G = globalThis.G || {};
     render();
   }
 
+  G.startConfiguredGame = () => {
+    const {diff, loc} = ui.newGameOptions;
+    G.newGame(diff, loc); G.Art.preload(loc);
+    Object.assign(ui, {tab:'buy', stockPage:1, entry:null, confirm:null, menu:false, newGameApproved:false, newGameOptions:null});
+    run(); window.scrollTo(0, 0); G.Tutorial?.start();
+  };
+
   /* ---------- 事件 ---------- */
   const handlers = {
     mute() { G.Sound.toggle(); render(); },
@@ -507,13 +527,16 @@ var G = globalThis.G = globalThis.G || {};
     help() { ui.help = true; render(); },
     'help-close'() { ui.help = false; render(); },
     'tutorial-replay'() { G.Tutorial.start(true); },
+    'entry-new'() { ui.entry='new'; ui.newGameApproved=false; render(); window.scrollTo(0,0); },
+    'entry-continue'() { ui.entry='continue'; ui.newGameApproved=false; render(); window.scrollTo(0,0); },
     start() {
       const diff = document.querySelector('input[name=diff]:checked').value;
       const loc = document.querySelector('input[name=loc]:checked').value;
-      G.newGame(diff, loc); G.Art.preload(loc);
-      ui.tab = 'buy'; run(); window.scrollTo(0, 0); G.Tutorial?.start();
+      ui.newGameOptions={diff,loc};
+      if (G.hasSave() && !ui.newGameApproved) { ui.confirm='start-new'; render(); return; }
+      G.startConfiguredGame();
     },
-    continue() { if (G.load()) run(null); else toast(G.loadError || '这份存档没读出来，试试之前的备份。', true); },
+    continue() { if (G.load()) { ui.entry=null; ui.newGameApproved=false; run(null); window.scrollTo(0,0); } else toast(G.loadError || '这份存档没读出来，试试之前的备份。', true); },
     tab(el) { if (ui.tab === el.dataset.tab) { toast('就在这页，接着忙吧'); return; } ui.tab = el.dataset.tab; window.scrollTo(0, 0); render(); },
     visit(el) { run(G.act.visit(el.dataset.ch), true); },
     'inspect-visit'() { run(G.act.inspectVisit()); },
@@ -571,6 +594,7 @@ var G = globalThis.G = globalThis.G || {};
   });
   document.addEventListener('change', e => {
     const el = e.target;
+    if (el.name === 'diff' || el.name === 'loc') ui.newGameOptions={diff:document.querySelector('input[name=diff]:checked').value,loc:document.querySelector('input[name=loc]:checked').value};
     if (el.name === 'loc') G.Art.preload(el.value);
     if (el.type === 'radio') document.querySelectorAll('.pick').forEach(p => p.classList.toggle('is-picked', p.querySelector('input').checked));
     if (el.dataset.price) run(G.act.setPrice(+el.dataset.price, parseFloat(el.value) * 10000), true);

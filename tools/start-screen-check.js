@@ -79,12 +79,7 @@ module.exports=async function startScreenCheck(page,width,height,out,check,resul
   await page.emulateMedia({reducedMotion:'reduce'});
   check(await page.locator('input[name=diff]').first().evaluate(e=>getComputedStyle(e,'::before').transitionDuration==='0s'&&getComputedStyle(e,'::after').transitionDuration==='0s'),label+' 减少动态效果关闭单选过渡');
   await page.locator('input[name=diff]').first().check();await page.locator('input[name=loc]').nth(1).check();
-  if(width>=1000){
-    await page.evaluate(()=>{window.__startHasSave=G.hasSave;G.hasSave=()=>true;G.render();});
-    check(await page.locator('[data-act=continue]').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight-8),label+' 含继续按钮也完整在首屏');
-    const saved=await page.evaluate(()=>{const r=s=>document.querySelector(s).getBoundingClientRect(),hero=r('.keyart'),options=r('.start-options');return {height:hero.height,target:Math.max(options.height,innerHeight*.7),center:Math.abs(hero.y+hero.height/2-options.y-options.height/2),gap:r('[data-act=start]').y-r('.pick-location:last-child').bottom};});
-    check(Math.abs(saved.height-saved.target)<.5&&saved.center<.5&&Math.abs(saved.gap-24)<.5,label+' 带继续按钮时高度/居中/24px间距均保持');
-    await page.evaluate(()=>{G.hasSave=window.__startHasSave;delete window.__startHasSave;G.render();scrollTo(0,0);});
-  } else await page.evaluate(()=>scrollTo(0,0));
+  check(await page.locator('[data-act=continue]').count()===0,label+' 新局配置不混入继续入口');
+  await page.evaluate(()=>scrollTo(0,0));
   (result.startScreens??=[]).push({width,height,...data});
 };

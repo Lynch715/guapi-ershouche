@@ -51,6 +51,7 @@ async function snapshot(p,name){await p.waitForLoadState('networkidle');await p.
  await snapshot(p,prefix+'-menu-flow-'+w+(online?'-online':''));
  result.viewports.push({width:w,height:h});await ctx.close();
  }
+ if(!process.env.USEDCAR_WIDTH)await require('./entry-check')(browser,url,out,check,result,prefix,online);
  if(!process.env.USEDCAR_WIDTH)await require('./save-slots-check')(browser,url,out,check,result,prefix,online);
  if(!process.env.USEDCAR_WIDTH)await require('./safe-area-check')(browser,url,out,check,result,prefix,online);
  if(!online){

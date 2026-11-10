@@ -48,6 +48,40 @@ small { font-size: 12px; }
 .pick:has(input:checked) { border-color: var(--gold); background: #24211a; }
 
 /* HUD */
+/* 回访直接进入继续页；新店的资金/地段配置单独显示。 */
+#app.at-entry { max-width:none; padding:0; }
+.return-entry { min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:calc(24px + var(--safe-area-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.return-shell { position:relative; width:100%; max-width:640px; }
+.return-shell>.toolbar { position:absolute; right:0; top:0; }
+.return-heading { padding-right:56px; margin-bottom:20px; }
+.return-brand { color:var(--gold); font-weight:700; letter-spacing:2px; margin:0 0 8px; }
+.return-heading h1 { font-size:32px; line-height:1.25; margin-bottom:8px; }
+.return-heading .muted { font-size:14px; }
+.resume-card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+.resume-art .store-scene { width:100%; height:150px; margin:0; border-radius:0; }
+.resume-details { padding:16px; }
+.resume-details>span { font-size:12px; }
+.resume-details h2 { margin:8px 0; font-size:20px; }
+.resume-details p { color:var(--muted); font-size:14px; }
+.resume-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0 0; }
+.resume-stats dt { color:var(--muted); font-size:12px; }
+.resume-stats dd { margin:4px 0 0; font-weight:700; font-size:20px; }
+.resume-empty { background:var(--card); border:1px solid var(--line); padding:20px; border-radius:16px; }
+.resume-empty h2 { font-size:20px; margin:0 0 12px; }
+.resume-empty p { color:var(--muted); }
+.return-actions { display:grid; gap:12px; margin-top:20px; }
+.return-actions .btn { margin:0; }
+.new-game-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.new-game-nav h2 { margin:0; font-size:20px; color:var(--gold); }
+.new-game-nav .btn { flex:none; }
+@media(min-width:1000px) {
+ .resume-art .store-scene { height:220px; }
+ .return-shell { max-width:680px; }
+ .new-game-nav { padding-right:56px; }
+ .return-actions { grid-template-columns:1fr 1fr; }
+ .return-actions>.btn:last-child:nth-child(3) { grid-column:1 / -1; }
+}
+
 .hud { position: sticky; top: 0; z-index: 5; background: rgba(17,18,21,.96); backdrop-filter: blur(8px);
   padding: 12px 14px 10px; border-bottom: 1px solid var(--line); }
 .hud-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }

@@ -2,8 +2,8 @@
 const fs=require('fs'),path=require('path');const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});const all=[];try{
 for(const width of [375,1920]){const p=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});await p.goto(process.env.USEDCAR_TEST_URL||'http://127.0.0.1:8893/');
-for(const scene of ['start','buy','stock','team','store','ledger','report','help','menu','ending']){
-await p.evaluate(scene=>{G.state=null;Object.assign(G.ui,{menu:false,confirm:null,help:false,report:null,result:null,saveDialog:null});if(scene!=='start'){G.newGame('small','suburb',303);G.state.store.level=2;for(let i=0;i<3;i++){const c=G.Car.generate('wreck');G.Car.reveal(c);G.addCar(c,90000,'试驾车源');}G.ui.tab=['buy','stock','team','store','ledger'].includes(scene)?scene:'buy';if(scene==='report')G.ui.report=G.act.endMonth().report;if(scene==='help')G.ui.help=true;if(scene==='menu')G.ui.menu=true;if(scene==='ending'){G.state.pending=[];G.state.over='win';}}G.render();},scene);
+for(const scene of ['start','buy','stock','team','store','ledger','report','help','menu','ending','continue','new']){
+await p.evaluate(scene=>{G.state=null;Object.assign(G.ui,{menu:false,confirm:null,help:false,report:null,result:null,saveDialog:null});if(scene!=='start'){G.newGame('small','suburb',303);G.state.store.level=2;for(let i=0;i<3;i++){const c=G.Car.generate('wreck');G.Car.reveal(c);G.addCar(c,90000,'试驾车源');}G.ui.tab=['buy','stock','team','store','ledger'].includes(scene)?scene:'buy';if(scene==='report')G.ui.report=G.act.endMonth().report;if(scene==='help')G.ui.help=true;if(scene==='menu')G.ui.menu=true;if(scene==='ending'){G.state.pending=[];G.state.over='win';}if(scene==='continue'||scene==='new'){G.save();G.state=null;G.ui.entry=scene;}}G.render();},scene);
 const audit=await p.evaluate(()=>{
  const root=document.querySelector('.overlay')||document.getElementById('app');const bad=[];let checked=0;
  const rgb=s=>{const a=s.match(/[\d.]+/g)?.map(Number);return a&&a.length>=3?[a[0],a[1],a[2],a[3]??1]:null;};

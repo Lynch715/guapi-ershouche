@@ -32,8 +32,9 @@ var G = globalThis.G = globalThis.G || {};
     'slot-load':[`读取档位 ${id}？`,'当前自动续玩会切换到这个档位的进度。三个手动档位都会保留。','读取此档'],
     'slot-import':[`导入到档位 ${id}？`,slot.empty?'导入后可在存档页读取，当前游戏保持不变。':'这会覆盖所选档位，当前游戏和其他档位保持不变。','确认导入'],
     restart:['新开一局？','回到开张界面。开新店后自动续玩会换成新局，三个手动档位都会保留。','去开新店'],
+    'start-new':['开始这家新店？','开张后将替换自动续玩进度，三个手动档位仍保留。想保留旧进度，可以先取消并保存到手动档位。','确认开张'],
    }[kind]||['确认操作？','请返回存档页重新选择。','确定'];
-   return shell(text[0],`<p>${text[1]}</p>${kind==='restart'?'':info}`,`<button class="btn primary" data-act="confirm-yes">${text[2]}</button><button class="btn" data-act="confirm-no">取消</button>`,'confirm-dialog');
+   return shell(text[0],`<p>${text[1]}</p>${['restart','start-new'].includes(kind)?'':info}`,`<button class="btn primary" data-act="confirm-yes">${text[2]}</button><button class="btn" data-act="confirm-no">取消</button>`,'confirm-dialog');
   },
   handlers:{
    menu(){ui().menu=true;draw();},
@@ -43,8 +44,9 @@ var G = globalThis.G = globalThis.G || {};
    'confirm-no'(){ui().confirm=null;draw();},
    'confirm-yes'(){
     const kind=ui().confirm,id=ui().targetSlot,expected=ui().slotExpected;
+    if(kind==='start-new'){G.startConfiguredGame();return;}
     if(kind==='restart'){
-     G.Tutorial?.stop(false);G.state=null;Object.assign(ui(),{menu:false,confirm:null,saveDialog:null,help:false,report:null,result:null,tab:'buy',stockPage:1});draw();window.scrollTo(0,0);return;
+     G.Tutorial?.stop(false);G.state=null;Object.assign(ui(),{menu:false,confirm:null,saveDialog:null,help:false,report:null,result:null,tab:'buy',stockPage:1,entry:'new',newGameApproved:true});draw();window.scrollTo(0,0);return;
     }
     let result;
     if(kind==='slot-save')result=G.SaveSlots.save(id,expected);

@@ -17,6 +17,7 @@ var G = globalThis.G = globalThis.G || {};
     try {
       G.state = s;
       return { month: s.month, net: G.netWorth(), dark: s.dark, rep: s.rep,
+        cash: s.cash, cars: s.cars.length, locationId: s.store.location, level: s.store.level, over: s.over,
         location: G.LOCATIONS[s.store.location].name, store: G.STORE_LEVELS[s.store.level].name };
     } finally { G.state = before; }
   };
@@ -49,6 +50,14 @@ var G = globalThis.G = globalThis.G || {};
   const slots = G.SaveSlots = {
     count: 3,
     key,
+    resume() {
+      try {
+        const raw = storage().getItem(G.SAVE_KEY);
+        if (raw === null) return { status: 'empty' };
+        try { return { status: 'ready', summary: summary(G.parseSave(raw)) }; }
+        catch (_) { return { status: 'invalid', msg: '上次的自动进度暂时读不出来，原文件仍保留。可以选择其他档位或导入备份。' }; }
+      } catch (e) { return { status: 'unavailable', msg: errorText(e) }; }
+    },
     init() {
       try {
         const ls = storage();

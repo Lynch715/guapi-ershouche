@@ -37,7 +37,7 @@ module.exports=async function safeAreaCheck(browser,url,out,check,result,prefix,
       const zero=await page.evaluate(()=>({height:document.querySelector('.safe-area-shield').getBoundingClientRect().height,hero:document.querySelector('.keyart').getBoundingClientRect().y}));
       check(zero.height===0&&(width>=1000||Math.abs(zero.hero-16)<.5),width+' 普通模式安全区0且无额外空白');
       await page.addStyleTag({content:':root{--safe-area-top:47px!important}'});
-      if(width>=1000)await page.evaluate(()=>{G.newGame('small','suburb',707);G.save();G.state=null;G.render();});
+      if(width>=1000)await page.evaluate(()=>{G.newGame('small','suburb',707);G.save();G.state=null;G.ui.entry='new';G.render();});
       await verify('start');
       await page.evaluate(()=>scrollTo(0,(document.documentElement.scrollHeight-innerHeight)/2));
       await verify('start-scroll');
@@ -48,11 +48,17 @@ module.exports=async function safeAreaCheck(browser,url,out,check,result,prefix,
       // 实际开始页存档菜单，包含滚动前的锁屏位置。
       await page.locator('[data-act=menu]').click();await verify('start-menu');
       await page.locator('[data-act=menu-close]').first().click();
+      await page.evaluate(()=>{G.newGame('small','suburb',707);G.save();G.state=null;G.ui.entry='continue';G.render();scrollTo(0,0);});
+      await verify('continue');
+      await page.evaluate(()=>scrollTo(0,(document.documentElement.scrollHeight-innerHeight)/2));
+      await verify('continue-scroll');
+      await page.locator('[data-act=entry-new]').click();
+      await verify('new-game');
       // 隔离上下文中生成正常经营页；每个原生弹窗都经同一渲染路径。
       const fixture=async name=>{
         await page.evaluate(name=>{
           G.Tutorial.stop(false);G.newGame('small','suburb',707);
-          Object.assign(G.ui,{tab:'store',menu:false,help:false,saveDialog:null,confirm:null,result:null,report:null,settling:false});
+          Object.assign(G.ui,{tab:'store',entry:null,menu:false,help:false,saveDialog:null,confirm:null,result:null,report:null,settling:false});
           G.state.pending=[];
           if(name==='game')for(let i=0;i<35;i++){
             G.state.history.push({month:i+1,revenue:10000,cogs:5000,opex:1000,profit:4000,cash:5000000,net:5000000,dark:0,rep:50});
